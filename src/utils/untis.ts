@@ -5,18 +5,33 @@ import { getCachedWeek, saveWeekToCache } from "./cache.ts";
 
 export interface ParsedLesson {
   subject: string;
+  subjectLongName: string;
   teacher: string;
+  teacherLongName: string;
   room: string;
+  roomLongName: string;
   startTime: string;
   endTime: string;
   cancelled: boolean;
   substitution: boolean;
+  remarks: string;
+}
+
+export interface TimeUnit {
+  name: string;
+  startTime: string;
+  endTime: string;
 }
 
 export interface DayTimetable {
   date: Date;
   dayName: string;
   lessons: ParsedLesson[];
+}
+
+export interface WeekTimetable {
+  days: DayTimetable[];
+  timegrid: TimeUnit[];
 }
 
 function formatUntisTime(time: number): string {
@@ -43,27 +58,27 @@ const DAY_NAMES = [
 ];
 
 function parseTimetableEntry(entry: WebAPITimetable): ParsedLesson {
-  const subject =
-    entry.subjects?.[0]?.element?.longName ||
-    entry.subjects?.[0]?.element?.name ||
-    "Unknown";
-  const teacher =
-    entry.teachers?.[0]?.element?.name ||
-    entry.teachers?.[0]?.element?.longName ||
-    "";
-  const room =
-    entry.rooms?.[0]?.element?.name ||
-    entry.rooms?.[0]?.element?.longName ||
-    "";
+  const subject = entry.subjects?.[0]?.element?.name || "Unknown";
+  const subjectLongName = entry.subjects?.[0]?.element?.longName || subject;
+  
+  const teacher = entry.teachers?.[0]?.element?.name || "";
+  const teacherLongName = entry.teachers?.[0]?.element?.longName || teacher;
+  
+  const room = entry.rooms?.[0]?.element?.name || "";
+  const roomLongName = entry.rooms?.[0]?.element?.longName || room;
 
   return {
     subject,
+    subjectLongName,
     teacher,
+    teacherLongName,
     room,
+    roomLongName,
     startTime: formatUntisTime(entry.startTime),
     endTime: formatUntisTime(entry.endTime),
-    cancelled: entry.is?.standard === false && entry.cellState === "SUBSTITUTION" || entry.lessonCode === "cancelled",
+    cancelled: (entry.is?.standard === false && entry.cellState === "SUBSTITUTION") || entry.lessonCode === "cancelled",
     substitution: entry.is?.substitution === true,
+    remarks: (entry as any).info || (entry as any).substitutionText || "",
   };
 }
 
@@ -93,7 +108,7 @@ export function formatDate(date: Date): string {
 export async function fetchWeekTimetable(
   config: Config,
   weekDate: Date
-): Promise<DayTimetable[]> {
+): Promise<WeekTimetable> {
   const untis = new WebUntis(
     config.school,
     config.username,
@@ -105,7 +120,20 @@ export async function fetchWeekTimetable(
   await untis.login();
 
   try {
-    const raw = await untis.getOwnTimetableForWeek(weekDate, 1);
+    const [raw, timegridRaw] = await Promise.all([
+      untis.getOwnTimetableForWeek(weekDate, 1),
+      untis.getTimegrid(),
+    ]);
+
+    // Parse timegrid
+    // WebUntis returns timegrids per day, but usually they are the same.
+    // We take the first one that has time units.
+    const firstGrid = timegridRaw.find((g) => g.timeUnits.length > 0);
+    const timegrid: TimeUnit[] = (firstGrid?.timeUnits || []).map((u) => ({
+      name: u.name,
+      startTime: formatUntisTime(u.startTime),
+      endTime: formatUntisTime(u.endTime),
+    }));
 
     // Group by date
     const byDate = new Map<number, WebAPITimetable[]>();
@@ -136,7 +164,7 @@ export async function fetchWeekTimetable(
       });
     }
 
-    const result = days;
+    const result: WeekTimetable = { days, timegrid };
     const mondayStr = getMonday(weekDate).toISOString().split("T")[0];
     if (mondayStr) {
       saveWeekToCache(mondayStr, result);
@@ -152,7 +180,7 @@ export async function getWeekTimetableWithCache(
   config: Config,
   weekDate: Date,
   forceRefresh: boolean = false
-): Promise<{ data: DayTimetable[]; fromCache: boolean }> {
+): Promise<{ data: WeekTimetable; fromCache: boolean }> {
   const mondayStr = getMonday(weekDate).toISOString().split("T")[0]!;
 
   if (!forceRefresh) {

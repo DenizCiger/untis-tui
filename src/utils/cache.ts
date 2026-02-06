@@ -1,7 +1,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import type { DayTimetable } from "./untis.ts";
+import type { WeekTimetable } from "./untis.ts";
 
 const CACHE_DIR = join(homedir(), ".config", "tui-untis");
 const CACHE_FILE = join(CACHE_DIR, "cache.json");
@@ -9,7 +9,7 @@ const CACHE_FILE = join(CACHE_DIR, "cache.json");
 interface CacheData {
   // Key is ISO Monday date string
   weeks: Record<string, {
-    data: DayTimetable[];
+    data: WeekTimetable;
     timestamp: number;
   }>;
 }
@@ -20,7 +20,7 @@ function ensureCacheDir() {
   }
 }
 
-export function getCachedWeek(mondayStr: string): DayTimetable[] | null {
+export function getCachedWeek(mondayStr: string): WeekTimetable | null {
   try {
     if (!existsSync(CACHE_FILE)) return null;
     const raw = readFileSync(CACHE_FILE, "utf-8");
@@ -30,16 +30,19 @@ export function getCachedWeek(mondayStr: string): DayTimetable[] | null {
     if (!week) return null;
 
     // Convert string dates back to Date objects
-    return week.data.map(day => ({
-      ...day,
-      date: new Date(day.date)
-    }));
+    return {
+      ...week.data,
+      days: week.data.days.map(day => ({
+        ...day,
+        date: new Date(day.date)
+      }))
+    };
   } catch {
     return null;
   }
 }
 
-export function saveWeekToCache(mondayStr: string, data: DayTimetable[]): void {
+export function saveWeekToCache(mondayStr: string, data: WeekTimetable): void {
   try {
     ensureCacheDir();
     let cache: CacheData = { weeks: {} };
