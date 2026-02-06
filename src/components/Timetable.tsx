@@ -4,6 +4,7 @@ import Spinner from "ink-spinner";
 import type { Config } from "../utils/config.ts";
 import {
   fetchWeekTimetable,
+  getWeekTimetableWithCache,
   getMonday,
   addDays,
   formatDate,
@@ -128,6 +129,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [days, setDays] = useState<DayTimetable[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFromCache, setIsFromCache] = useState(false);
   const [error, setError] = useState("");
   const [colorMap] = useState(() => new Map<string, string>());
 
@@ -140,20 +142,32 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+      setLoading(true); // Always start with loading to clear old data
+      setDays(null);
       setError("");
-      try {
-        const targetDate = addDays(new Date(), weekOffset * 7);
-        const result = await fetchWeekTimetable(config, targetDate);
-        if (!cancelled) {
-          setDays(result);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.message || "Failed to fetch timetable");
-        }
-      } finally {
-        if (!cancelled) {
+      const targetDate = addDays(new Date(), weekOffset * 7);
+      
+      // Check cache first
+      const { data: cachedData, fromCache } = await getWeekTimetableWithCache(config, targetDate);
+      if (!cancelled) {
+        if (fromCache) {
+          setDays(cachedData);
+          setIsFromCache(true);
+          setLoading(false);
+          
+          // Background refresh
+          try {
+            const freshData = await fetchWeekTimetable(config, targetDate);
+            if (!cancelled) {
+              setDays(freshData);
+              setIsFromCache(false);
+            }
+          } catch (err: any) {
+             // Silence background refresh errors if we have cache
+          }
+        } else {
+          setDays(cachedData);
+          setIsFromCache(false);
           setLoading(false);
         }
       }
@@ -182,13 +196,17 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       setWeekOffset(0);
     }
     if (input === "r") {
-      setDays(null);
       setLoading(true);
+      setError("");
       fetchWeekTimetable(config, addDays(new Date(), weekOffset * 7))
-        .then(setDays)
+        .then((fresh) => {
+          setDays(fresh);
+          setIsFromCache(false);
+        })
         .catch((err) => setError(err?.message || "Refresh failed"))
         .finally(() => setLoading(false));
     }
+
   });
 
   const today = new Date();
@@ -217,6 +235,12 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
           <Text color="cyan" bold>
             {" "}
             (This week)
+          </Text>
+        )}
+        {isFromCache && !loading && (
+          <Text color="yellow" dimColor>
+            {" "}
+            (cached)
           </Text>
         )}
       </Box>

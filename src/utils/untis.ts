@@ -1,6 +1,7 @@
 import { WebUntis } from "webuntis";
 import type { WebAPITimetable } from "webuntis";
 import type { Config } from "./config.ts";
+import { getCachedWeek, saveWeekToCache } from "./cache.ts";
 
 export interface ParsedLesson {
   subject: string;
@@ -135,10 +136,34 @@ export async function fetchWeekTimetable(
       });
     }
 
-    return days;
+    const result = days;
+    const mondayStr = getMonday(weekDate).toISOString().split("T")[0];
+    if (mondayStr) {
+      saveWeekToCache(mondayStr, result);
+    }
+
+    return result;
   } finally {
     await untis.logout();
   }
+}
+
+export async function getWeekTimetableWithCache(
+  config: Config,
+  weekDate: Date,
+  forceRefresh: boolean = false
+): Promise<{ data: DayTimetable[]; fromCache: boolean }> {
+  const mondayStr = getMonday(weekDate).toISOString().split("T")[0]!;
+
+  if (!forceRefresh) {
+    const cached = getCachedWeek(mondayStr);
+    if (cached) {
+      return { data: cached, fromCache: true };
+    }
+  }
+
+  const data = await fetchWeekTimetable(config, weekDate);
+  return { data, fromCache: false };
 }
 
 export async function testCredentials(config: Config): Promise<boolean> {
