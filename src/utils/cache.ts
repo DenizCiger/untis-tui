@@ -57,14 +57,16 @@ function ensureLessonInstanceId(
   dayDate: Date,
   indexInDay: number,
 ): ParsedLesson {
-  if (lesson.instanceId) {
-    return lesson;
-  }
-
   const datePart = new Date(dayDate).toISOString().slice(0, 10);
   return {
     ...lesson,
-    instanceId: `${datePart}-${lesson.startTime}-${lesson.endTime}-${lesson.subject}-${lesson.teacher}-${lesson.room}-${indexInDay}`,
+    lessonText: lesson.lessonText || "",
+    cellState: lesson.cellState || "",
+    allTeachers: lesson.allTeachers ?? (lesson.teacher ? [lesson.teacher] : []),
+    allClasses: lesson.allClasses ?? [],
+    instanceId:
+      lesson.instanceId ||
+      `${datePart}-${lesson.startTime}-${lesson.endTime}-${lesson.subject}-${lesson.teacher}-${lesson.room}-${indexInDay}`,
   };
 }
 

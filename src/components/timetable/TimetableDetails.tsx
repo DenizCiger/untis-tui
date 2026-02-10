@@ -30,6 +30,20 @@ export default function TimetableDetails({
     Math.max(10, termWidth - 10),
   );
 
+  const classesLabel = truncateText(
+    selectedLesson?.allClasses.join(", ") || "N/A",
+    Math.max(10, termWidth - 11),
+  );
+
+  const teachersLabel = truncateText(
+    selectedLesson?.allTeachers.join(", ") || selectedLesson?.teacher || "N/A",
+    Math.max(10, termWidth - 12),
+  );
+
+  const cellStateLabel = (selectedLesson?.cellState || "").trim();
+  const chipReservedWidth = cellStateLabel ? cellStateLabel.length + 6 : 0;
+  const cellStateChipColors = getCellStateChipColors(cellStateLabel);
+
   return (
     <Box marginTop={0} paddingX={0} flexDirection="column" minHeight={4}>
       <Box>
@@ -38,12 +52,25 @@ export default function TimetableDetails({
       {selectedLesson ? (
         <Box flexDirection="column" paddingX={1}>
           <Box justifyContent="space-between">
-            <Text bold color="cyan">
-              {truncateText(
-                `${selectedLesson.subjectLongName} (${selectedLesson.subject})`,
-                Math.max(10, termWidth - 24),
-              )}
-            </Text>
+            <Box flexDirection="row">
+              <Text bold color="cyan">
+                {truncateText(
+                  `${selectedLesson.subjectLongName} (${selectedLesson.subject})`,
+                  Math.max(10, termWidth - 24 - chipReservedWidth),
+                )}
+              </Text>
+              {cellStateLabel ? (
+                <Box flexDirection="row" marginLeft={1}>
+                  <Text
+                    backgroundColor={cellStateChipColors.backgroundColor}
+                    color={cellStateChipColors.color}
+                    bold
+                  >
+                    {` ${cellStateLabel} `}
+                  </Text>
+                </Box>
+              ) : null}
+            </Box>
             <Text color="yellow">
               {selectedLesson.startTime} - {selectedLesson.endTime}
             </Text>
@@ -78,6 +105,28 @@ export default function TimetableDetails({
             </Text>
           </Box>
 
+          <Box>
+            <Text dimColor>All teachers · </Text>
+            <Text>{teachersLabel}</Text>
+          </Box>
+
+          <Box>
+            <Text dimColor>Classes · </Text>
+            <Text>{classesLabel}</Text>
+          </Box>
+
+          {selectedLesson.lessonText && (
+            <Box>
+              <Text dimColor>Lesson text · </Text>
+              <Text>
+                {truncateText(
+                  selectedLesson.lessonText,
+                  Math.max(10, termWidth - 16),
+                )}
+              </Text>
+            </Box>
+          )}
+
           <Box height={2}>
             {selectedLesson.remarks ? (
               <Text color="magenta" italic>
@@ -92,9 +141,7 @@ export default function TimetableDetails({
                 CANCELLED
               </Text>
             ) : overlappingLessons.length > 0 ? (
-              <Text dimColor>
-                Also: {siblingLabel}
-              </Text>
+              <Text dimColor>Also: {siblingLabel}</Text>
             ) : null}
           </Box>
         </Box>
@@ -110,4 +157,25 @@ export default function TimetableDetails({
       )}
     </Box>
   );
+}
+
+function getCellStateChipColors(cellState: string): {
+  backgroundColor: "red" | "yellow" | "green" | "greenBright" | "blue" | "gray";
+  color: "black" | "white";
+} {
+  const normalized = cellState.toUpperCase();
+
+  switch (normalized) {
+    case "EXAM":
+      return { backgroundColor: "yellow", color: "white" };
+    case "CONFIRMED":
+      return { backgroundColor: "green", color: "white" };
+    case "SUBSTITUTION":
+    case "ADDITIONAL":
+      return { backgroundColor: "greenBright", color: "white" };
+    case "CANCELLED":
+      return { backgroundColor: "red", color: "white" };
+    default:
+      return { backgroundColor: "gray", color: "white" };
+  }
 }

@@ -7,10 +7,14 @@ export interface ParsedLesson {
   instanceId: string;
   subject: string;
   subjectLongName: string;
+  lessonText: string;
+  cellState: string;
   teacher: string;
   teacherLongName: string;
+  allTeachers: string[];
   room: string;
   roomLongName: string;
+  allClasses: string[];
   startTime: string;
   endTime: string;
   cancelled: boolean;
@@ -67,11 +71,24 @@ function parseTimetableEntry(
   const subject = entry.subjects?.[0]?.element?.name || "Unknown";
   const subjectLongName = entry.subjects?.[0]?.element?.longName || subject;
   
+  const lessonText = entryAny.lessonText || "";
+
   const teacher = entry.teachers?.[0]?.element?.name || "";
   const teacherLongName = entry.teachers?.[0]?.element?.longName || teacher;
-  
+  const allTeachers = (entry.teachers ?? [])
+    .map((teacherEntry) => teacherEntry.element?.name || "")
+    .filter(Boolean);
+
   const room = entry.rooms?.[0]?.element?.name || "";
   const roomLongName = entry.rooms?.[0]?.element?.longName || room;
+
+  const classesRaw = (entryAny.classes ?? entryAny.klassen ?? []) as Array<{
+    name?: string;
+    element?: { name?: string };
+  }>;
+  const allClasses = classesRaw
+    .map((classEntry) => classEntry.element?.name || classEntry.name || "")
+    .filter(Boolean);
 
   const instanceId =
     String(
@@ -85,10 +102,14 @@ function parseTimetableEntry(
     instanceId,
     subject,
     subjectLongName,
+    lessonText,
+    cellState: entry.cellState || "",
     teacher,
     teacherLongName,
+    allTeachers,
     room,
     roomLongName,
+    allClasses,
     startTime: formatUntisTime(entry.startTime),
     endTime: formatUntisTime(entry.endTime),
     cancelled: (entry.is?.standard === false && entry.cellState === "SUBSTITUTION") || entry.lessonCode === "cancelled",
