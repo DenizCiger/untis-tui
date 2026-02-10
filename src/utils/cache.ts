@@ -5,6 +5,8 @@ import type { WeekTimetable } from "./untis.ts";
 
 const CACHE_DIR = join(homedir(), ".config", "tui-untis");
 const CACHE_FILE = join(CACHE_DIR, "cache.json");
+const MAX_CACHED_WEEKS = 12;
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 21;
 
 interface CacheData {
   // Key is ISO Monday date string
@@ -28,6 +30,11 @@ export function getCachedWeek(mondayStr: string): WeekTimetable | null {
     
     const week = cache.weeks[mondayStr];
     if (!week) return null;
+    if (Date.now() - week.timestamp > CACHE_TTL_MS) {
+      delete cache.weeks[mondayStr];
+      writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
+      return null;
+    }
 
     // Convert string dates back to Date objects
     return {
@@ -54,6 +61,12 @@ export function saveWeekToCache(mondayStr: string, data: WeekTimetable): void {
       data,
       timestamp: Date.now()
     };
+
+    const entries = Object.entries(cache.weeks)
+      .sort((a, b) => b[1].timestamp - a[1].timestamp)
+      .slice(0, MAX_CACHED_WEEKS);
+
+    cache.weeks = Object.fromEntries(entries);
 
     writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
   } catch {

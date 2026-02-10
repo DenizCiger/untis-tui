@@ -37,24 +37,40 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
   const [activeField, setActiveField] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  useInput((_input, key) => {
-    if (loading) return;
+  useInput(
+    (_input, key) => {
+      if (loading) return;
 
-    if (key.upArrow) {
-      setActiveField((prev) => Math.max(0, prev - 1));
-    }
-    if (key.downArrow) {
-      setActiveField((prev) => Math.min(FIELDS.length - 1, prev + 1));
-    }
-  });
+      if (key.tab && key.shift) {
+        setActiveField((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (key.tab) {
+        setActiveField((prev) => Math.min(FIELDS.length - 1, prev + 1));
+        return;
+      }
+      if (key.upArrow) {
+        setActiveField((prev) => Math.max(0, prev - 1));
+      }
+      if (key.downArrow) {
+        setActiveField((prev) => Math.min(FIELDS.length - 1, prev + 1));
+      }
+
+      if (_input === "v") {
+        setShowPassword((prev) => !prev);
+      }
+    },
+    { isActive: Boolean(process.stdin.isTTY) },
+  );
 
   const handleSubmit = async () => {
     const config: Config = {
-      school: values.school,
-      username: values.username,
+      school: values.school.trim(),
+      username: values.username.trim(),
       password: values.password,
-      server: values.server,
+      server: values.server.trim(),
     };
 
     if (!config.server || !config.school || !config.username || !config.password) {
@@ -84,7 +100,7 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
 
       <Box marginBottom={1}>
         <Text dimColor>
-          Enter your WebUntis credentials. Use Tab/Enter to navigate fields.
+          Enter your WebUntis credentials. Use arrows or Tab to change focus.
         </Text>
       </Box>
 
@@ -114,13 +130,15 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
                   }
                 }}
                 placeholder={field.placeholder}
-                mask={field.key === "password" ? "*" : undefined}
+                mask={field.key === "password" && !showPassword ? "*" : undefined}
                 focus={true}
               />
             ) : (
               <Text dimColor={index !== activeField}>
                 {field.key === "password"
-                  ? "*".repeat(values[field.key].length) || field.placeholder
+                  ? showPassword
+                    ? values[field.key] || field.placeholder
+                    : "*".repeat(values[field.key].length) || field.placeholder
                   : values[field.key] || field.placeholder}
               </Text>
             )}
@@ -146,8 +164,7 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
       {!loading && (
         <Box marginTop={1}>
           <Text dimColor>
-            Press Enter to move to the next field. Submit on the last field to
-            log in.
+            Enter next/submit | Tab move focus | v toggle password visibility
           </Text>
         </Box>
       )}
