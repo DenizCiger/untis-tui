@@ -28,8 +28,35 @@ const LessonCell = memo(function LessonCell({
     ? `${lesson.room || "?"}${lesson.teacher ? ` ${lesson.teacher}` : ""}`
     : "";
 
-  const bg = isFocused ? "white" : "blackBright";
-  const fg = isFocused ? "black" : "white";
+  const cellState = (lesson.cellState || "").trim().toUpperCase();
+  const isSubstitutionLike =
+    lesson.substitution ||
+    cellState === "SUBSTITUTION" ||
+    cellState === "ADDITIONAL";
+  const isExam = cellState === "EXAM";
+  const isCancelled = lesson.cancelled || cellState === "CANCELLED";
+
+  const baseBg = isCancelled
+    ? "red"
+    : isExam
+      ? "yellow"
+      : isSubstitutionLike
+        ? "green"
+        : "blackBright";
+  const baseFg = "white";
+
+  const focusedBg =
+    baseBg === "red"
+      ? "redBright"
+      : baseBg === "yellow"
+        ? "yellowBright"
+        : baseBg === "green"
+          ? "greenBright"
+          : "white";
+  const focusedFg = "black";
+
+  const mainBg = isFocused ? focusedBg : baseBg;
+  const mainFg = isFocused ? focusedFg : baseFg;
 
   return (
     <Box
@@ -40,20 +67,20 @@ const LessonCell = memo(function LessonCell({
       justifyContent="center"
     >
       <Text
-        backgroundColor={bg}
-        color={fg}
+        backgroundColor={mainBg}
+        color={mainFg}
         bold={startsHere}
         strikethrough={lesson.cancelled && startsHere}
       >
         <Text color={stripeColor}>▍</Text>
         {fitText(title, contentWidth)}
       </Text>
-      <Text backgroundColor={bg} color={fg}>
+      <Text backgroundColor={mainBg} color={mainFg}>
         <Text color={stripeColor}>▍</Text>
         {fitText(meta, contentWidth)}
       </Text>
       {continuesDown ? (
-        <Text backgroundColor={bg} color={fg}>
+        <Text backgroundColor={baseBg} color={baseFg}>
           <Text color={stripeColor}>▍</Text>
           {" ".repeat(contentWidth)}
         </Text>
