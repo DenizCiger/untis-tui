@@ -11,18 +11,35 @@ export interface RenderLesson {
   lesson: ParsedLesson;
   continuation: Continuation;
   lessonKey: string;
-  occurrence: number;
+  lessonInstanceId: string;
+  continuityKey: string;
 }
 
 export interface SelectedLessonRange {
   lesson: ParsedLesson;
   lessonKey: string;
-  occurrence: number;
+  lessonInstanceId: string;
   startPeriodIdx: number;
   endPeriodIdx: number;
 }
 
 export type DayLessonIndex = Map<string, RenderLesson[]>;
+export interface SplitLanePeriod {
+  split: boolean;
+  left: RenderLesson | null;
+  right: RenderLesson | null;
+  hiddenCount: number;
+}
+
+export type DaySplitLaneIndex = Map<string, SplitLanePeriod>;
+
+export interface OverlayPeriod {
+  split: boolean;
+  lanes: Array<RenderLesson | null>;
+  hiddenCount: number;
+}
+
+export type DayOverlayIndex = Map<string, OverlayPeriod>;
 
 export const EMPTY_LESSONS: RenderLesson[] = [];
 
@@ -58,60 +75,58 @@ export function indexLessonsByPeriod(
   days: DayTimetable[],
   timegrid: TimeUnit[],
 ): DayLessonIndex[] {
-  const periodIndexByStart = new Map(
-    timegrid.map((period, idx) => [period.startTime, idx]),
-  );
+  const periodRanges = timegrid.map((period) => ({
+    ...period,
+    startMinutes: parseTimeToMinutes(period.startTime),
+    endMinutes: parseTimeToMinutes(period.endTime),
+  }));
 
   return days.map((day) => {
-    const lessonsByStart = new Map<string, ParsedLesson[]>();
-
-    for (const lesson of day.lessons) {
-      const existing = lessonsByStart.get(lesson.startTime);
-      if (existing) {
-        existing.push(lesson);
-      } else {
-        lessonsByStart.set(lesson.startTime, [lesson]);
-      }
-    }
-
-    const countsByPeriod = new Map<string, Map<string, number>>();
-    for (const [startTime, lessons] of lessonsByStart) {
-      const counts = new Map<string, number>();
-      for (const lesson of lessons) {
-        const key = getLessonKey(lesson);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      countsByPeriod.set(startTime, counts);
-    }
-
     const indexed: DayLessonIndex = new Map();
-    for (const [startTime, lessons] of lessonsByStart) {
-      const periodIdx = periodIndexByStart.get(startTime);
-      if (periodIdx === undefined) {
+    const sortedLessons = [...day.lessons].sort(compareLessonsForDisplay);
+    const emptyParsedLessons: ParsedLesson[] = [];
+
+    const lessonsByPeriod = periodRanges.map((period) =>
+      sortedLessons
+        .filter((lesson) =>
+          lessonIntersectsPeriod(lesson, period.startMinutes, period.endMinutes),
+        )
+        .sort((left, right) => compareLessonsForPeriod(left, right, period.startTime)),
+    );
+
+    const keyCountsByPeriod = lessonsByPeriod.map((lessonsInPeriod) => {
+      const counts = new Map<string, number>();
+      for (const lesson of lessonsInPeriod) {
+        const lessonKey = getLessonKey(lesson);
+        counts.set(lessonKey, (counts.get(lessonKey) ?? 0) + 1);
+      }
+
+      return counts;
+    });
+
+    for (const [periodIdx, period] of periodRanges.entries()) {
+      const lessonsInPeriod = lessonsByPeriod[periodIdx] ?? emptyParsedLessons;
+
+      if (lessonsInPeriod.length === 0) {
         continue;
       }
 
-      const previousStart =
-        periodIdx > 0 ? timegrid[periodIdx - 1]?.startTime : undefined;
-      const nextStart =
-        periodIdx < timegrid.length - 1
-          ? timegrid[periodIdx + 1]?.startTime
-          : undefined;
-
       const seenInPeriod = new Map<string, number>();
-      const rendered = lessons.map<RenderLesson>((lesson) => {
-        const key = getLessonKey(lesson);
-        const occurrence = seenInPeriod.get(key) ?? 0;
-        seenInPeriod.set(key, occurrence + 1);
+      const rendered = lessonsInPeriod.map<RenderLesson>((lesson) => {
+        const lessonKey = getLessonKey(lesson);
+        const occurrence = seenInPeriod.get(lessonKey) ?? 0;
+        seenInPeriod.set(lessonKey, occurrence + 1);
 
-        const prevCount = previousStart
-          ? (countsByPeriod.get(previousStart)?.get(key) ?? 0)
-          : 0;
-        const nextCount = nextStart
-          ? (countsByPeriod.get(nextStart)?.get(key) ?? 0)
-          : 0;
+        const previousCount =
+          periodIdx > 0
+            ? (keyCountsByPeriod[periodIdx - 1]?.get(lessonKey) ?? 0)
+            : 0;
+        const nextCount =
+          periodIdx < periodRanges.length - 1
+            ? (keyCountsByPeriod[periodIdx + 1]?.get(lessonKey) ?? 0)
+            : 0;
 
-        const hasPrevious = prevCount > occurrence;
+        const hasPrevious = previousCount > occurrence;
         const hasNext = nextCount > occurrence;
 
         let continuation: Continuation = "single";
@@ -126,16 +141,224 @@ export function indexLessonsByPeriod(
         return {
           lesson,
           continuation,
-          lessonKey: key,
-          occurrence,
+          lessonKey,
+          lessonInstanceId: lesson.instanceId || getLessonKey(lesson),
+          continuityKey: `${lessonKey}#${occurrence}`,
         };
       });
 
-      indexed.set(startTime, rendered);
+      indexed.set(period.startTime, rendered);
     }
 
     return indexed;
   });
+}
+
+export function buildSplitLaneIndex(
+  dayIndex: DayLessonIndex,
+  timegrid: TimeUnit[],
+): DaySplitLaneIndex {
+  const overlay = buildOverlayIndex(dayIndex, timegrid, 2);
+  const split: DaySplitLaneIndex = new Map();
+
+  for (const period of timegrid) {
+    const row = overlay.get(period.startTime);
+    split.set(period.startTime, {
+      split: row?.split ?? false,
+      left: row?.lanes[0] ?? null,
+      right: row?.lanes[1] ?? null,
+      hiddenCount: row?.hiddenCount ?? 0,
+    });
+  }
+
+  return split;
+}
+
+export function buildOverlayIndex(
+  dayIndex: DayLessonIndex,
+  timegrid: TimeUnit[],
+  laneCount: number,
+): DayOverlayIndex {
+  const overlay: DayOverlayIndex = new Map();
+  const lanes = Math.max(1, laneCount);
+  let previousLaneKeys: Array<string | null> = Array.from({ length: lanes }, () => null);
+
+  for (const [periodIdx, period] of timegrid.entries()) {
+    const entries = dayIndex.get(period.startTime) ?? EMPTY_LESSONS;
+    const shouldSplit =
+      entries.length > 1 || shouldReserveSplitForSingle(dayIndex, timegrid, periodIdx, entries);
+
+    if (!shouldSplit) {
+      overlay.set(period.startTime, {
+        split: false,
+        lanes: Array.from({ length: lanes }, () => null),
+        hiddenCount: 0,
+      });
+      previousLaneKeys = Array.from({ length: lanes }, () => null);
+      continue;
+    }
+
+    const laneEntries: Array<RenderLesson | null> = Array.from({ length: lanes }, () => null);
+    const remaining = [...entries];
+
+    for (let laneIdx = 0; laneIdx < lanes; laneIdx += 1) {
+      const previousKey = previousLaneKeys[laneIdx];
+      if (!previousKey) {
+        continue;
+      }
+
+      const matchIdx = remaining.findIndex((entry) => entry.continuityKey === previousKey);
+      if (matchIdx !== -1) {
+        const [matched] = remaining.splice(matchIdx, 1);
+        laneEntries[laneIdx] = matched ?? null;
+      }
+    }
+
+    if (lanes >= 1 && !laneEntries[0]) {
+      const candidate = pickLeftLaneCandidate(remaining);
+      if (candidate) {
+        laneEntries[0] = candidate;
+        removeFromRemainingByContinuityKey(remaining, candidate.continuityKey);
+      }
+    }
+
+    if (lanes >= 2 && !laneEntries[1]) {
+      const candidate = pickRightLaneCandidate(remaining);
+      if (candidate) {
+        laneEntries[1] = candidate;
+        removeFromRemainingByContinuityKey(remaining, candidate.continuityKey);
+      }
+    }
+
+    for (let laneIdx = 2; laneIdx < lanes; laneIdx += 1) {
+      if (!laneEntries[laneIdx] && remaining.length > 0) {
+        laneEntries[laneIdx] = remaining.shift() ?? null;
+      }
+    }
+
+    overlay.set(period.startTime, {
+      split: true,
+      lanes: laneEntries,
+      hiddenCount: remaining.length,
+    });
+
+    previousLaneKeys = laneEntries.map((entry) => entry?.continuityKey ?? null);
+  }
+
+  return overlay;
+}
+
+function parseTimeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map((part) => Number.parseInt(part, 10));
+  return (hours ?? 0) * 60 + (minutes ?? 0);
+}
+
+function lessonIntersectsPeriod(
+  lesson: ParsedLesson,
+  periodStartMinutes: number,
+  periodEndMinutes: number,
+): boolean {
+  const lessonStartMinutes = parseTimeToMinutes(lesson.startTime);
+  const lessonEndMinutes = parseTimeToMinutes(lesson.endTime);
+
+  return lessonStartMinutes < periodEndMinutes && lessonEndMinutes > periodStartMinutes;
+}
+
+function compareLessonsForDisplay(left: ParsedLesson, right: ParsedLesson): number {
+  const byStart = left.startTime.localeCompare(right.startTime);
+  if (byStart !== 0) return byStart;
+
+  const byEnd = left.endTime.localeCompare(right.endTime);
+  if (byEnd !== 0) return byEnd;
+
+  const bySubject = left.subject.localeCompare(right.subject);
+  if (bySubject !== 0) return bySubject;
+
+  const byTeacher = left.teacher.localeCompare(right.teacher);
+  if (byTeacher !== 0) return byTeacher;
+
+  const byRoom = left.room.localeCompare(right.room);
+  if (byRoom !== 0) return byRoom;
+
+  return (left.instanceId || "").localeCompare(right.instanceId || "");
+}
+
+function compareLessonsForPeriod(
+  left: ParsedLesson,
+  right: ParsedLesson,
+  periodStart: string,
+): number {
+  const leftStartsHere = left.startTime === periodStart;
+  const rightStartsHere = right.startTime === periodStart;
+  if (leftStartsHere !== rightStartsHere) {
+    return leftStartsHere ? -1 : 1;
+  }
+
+  return compareLessonsForDisplay(left, right);
+}
+
+function shouldReserveSplitForSingle(
+  dayIndex: DayLessonIndex,
+  timegrid: TimeUnit[],
+  periodIdx: number,
+  entries: RenderLesson[],
+): boolean {
+  if (entries.length !== 1) {
+    return false;
+  }
+
+  const [entry] = entries;
+  if (!entry || entry.continuation === "single") {
+    return false;
+  }
+
+  const previousStart = periodIdx > 0 ? timegrid[periodIdx - 1]?.startTime : undefined;
+  const nextStart = periodIdx < timegrid.length - 1 ? timegrid[periodIdx + 1]?.startTime : undefined;
+
+  const previousEntries = previousStart ? dayIndex.get(previousStart) ?? EMPTY_LESSONS : EMPTY_LESSONS;
+  const nextEntries = nextStart ? dayIndex.get(nextStart) ?? EMPTY_LESSONS : EMPTY_LESSONS;
+
+  const lessonId = entry.lessonInstanceId;
+  const previousHasOverlap =
+    previousEntries.length > 1 &&
+    previousEntries.some((other) => other.lessonInstanceId === lessonId);
+  const nextHasOverlap =
+    nextEntries.length > 1 &&
+    nextEntries.some((other) => other.lessonInstanceId === lessonId);
+
+  return previousHasOverlap || nextHasOverlap;
+}
+
+function pickLeftLaneCandidate(entries: RenderLesson[]): RenderLesson | null {
+  const continuing = entries.find(
+    (entry) => entry.continuation === "middle" || entry.continuation === "end",
+  );
+  if (continuing) {
+    return continuing;
+  }
+
+  return entries[0] ?? null;
+}
+
+function pickRightLaneCandidate(entries: RenderLesson[]): RenderLesson | null {
+  const startsHere = entries.find(
+    (entry) => entry.continuation === "start" || entry.continuation === "single",
+  );
+  if (startsHere) {
+    return startsHere;
+  }
+
+  return entries[0] ?? null;
+}
+
+function removeFromRemainingByContinuityKey(
+  entries: RenderLesson[],
+  continuityKey: string,
+): void {
+  const index = entries.findIndex((entry) => entry.continuityKey === continuityKey);
+  if (index !== -1) {
+    entries.splice(index, 1);
+  }
 }
 
 export function findCurrentPeriodIndex(timegrid: TimeUnit[]): number {
@@ -175,8 +398,7 @@ export function getSelectedLessonRange(
     const prevEntries = dayIndex.get(prevPeriod.startTime) ?? EMPTY_LESSONS;
     const match = prevEntries.find(
       (entry) =>
-        entry.lessonKey === selectedEntry.lessonKey &&
-        entry.occurrence === selectedEntry.occurrence,
+        entry.lessonInstanceId === selectedEntry.lessonInstanceId,
     );
     if (!match) break;
 
@@ -190,8 +412,7 @@ export function getSelectedLessonRange(
     const nextEntries = dayIndex.get(nextPeriod.startTime) ?? EMPTY_LESSONS;
     const match = nextEntries.find(
       (entry) =>
-        entry.lessonKey === selectedEntry.lessonKey &&
-        entry.occurrence === selectedEntry.occurrence,
+        entry.lessonInstanceId === selectedEntry.lessonInstanceId,
     );
     if (!match) break;
 
@@ -201,7 +422,7 @@ export function getSelectedLessonRange(
   return {
     lesson: selectedEntry.lesson,
     lessonKey: selectedEntry.lessonKey,
-    occurrence: selectedEntry.occurrence,
+    lessonInstanceId: selectedEntry.lessonInstanceId,
     startPeriodIdx,
     endPeriodIdx,
   };

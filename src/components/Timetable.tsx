@@ -7,9 +7,9 @@ import TimetableDetails from "./timetable/TimetableDetails.tsx";
 import TimetableFooter from "./timetable/TimetableFooter.tsx";
 import TimetableHeader from "./timetable/TimetableHeader.tsx";
 import {
+  buildOverlayIndex,
   EMPTY_LESSONS,
   findCurrentPeriodIndex,
-  getSelectedLessonRange,
   indexLessonsByPeriod,
 } from "./timetable/model.ts";
 import { buildGridDivider, centerText } from "./timetable/text.ts";
@@ -62,6 +62,11 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
     [data],
   );
 
+  const overlayIndexByDay = useMemo(() => {
+    if (!data) return [];
+    return dayLessonIndex.map((dayIndex) => buildOverlayIndex(dayIndex, data.timegrid, 2));
+  }, [data, dayLessonIndex]);
+
   const {
     selectedDayIdx,
     selectedPeriodIdx,
@@ -72,6 +77,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
   } = useTimetableNavigation({
     data,
     dayLessonIndex,
+    overlayIndexByDay,
     rowsPerPage,
     setWeekOffset,
     onQuit: exit,
@@ -111,26 +117,15 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
         currentTime >= period.startTime && currentTime <= period.endTime,
     ) ?? -1;
 
-  const selectedRange = useMemo(() => {
+  const selectedLesson = useMemo(() => {
     if (!data) return null;
-    return getSelectedLessonRange(
-      data,
-      dayLessonIndex,
-      selectedDayIdx,
-      selectedPeriodIdx,
-      selectedLessonIdx,
-    );
+
+    const day = dayLessonIndex[selectedDayIdx];
+    const period = data.timegrid[selectedPeriodIdx];
+    if (!day || !period) return null;
+
+    return (day.get(period.startTime) ?? EMPTY_LESSONS)[selectedLessonIdx]?.lesson ?? null;
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLessonIdx]);
-
-  const selectedLesson = selectedRange?.lesson ?? null;
-
-  const selectedRangeTime = useMemo(() => {
-    if (!data || !selectedRange) return null;
-    const start = data.timegrid[selectedRange.startPeriodIdx]?.startTime;
-    const end = data.timegrid[selectedRange.endPeriodIdx]?.endTime;
-    if (!start || !end) return null;
-    return `${start} - ${end}`;
-  }, [data, selectedRange]);
 
   const selectedLessonCount = useMemo(() => {
     if (!data) return 0;
@@ -141,6 +136,24 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
 
     return (day.get(period.startTime) ?? EMPTY_LESSONS).length;
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx]);
+
+  const selectedLessonPosition =
+    selectedLessonCount > 0
+      ? Math.min(selectedLessonIdx + 1, selectedLessonCount)
+      : 0;
+
+  const overlappingLessons = useMemo(() => {
+    if (!data || !selectedLesson) return [];
+
+    const day = dayLessonIndex[selectedDayIdx];
+    const period = data.timegrid[selectedPeriodIdx];
+    if (!day || !period) return [];
+
+    const lessons = day.get(period.startTime) ?? EMPTY_LESSONS;
+    return lessons
+      .filter((entry) => entry.lesson.instanceId !== selectedLesson.instanceId)
+      .map((entry) => entry.lesson);
+  }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLesson]);
 
   const selectedDayName = data?.days[selectedDayIdx]?.dayName ?? "-";
   const selectedPeriodName = data?.timegrid[selectedPeriodIdx]?.name ?? "-";
@@ -238,11 +251,11 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                 period={period}
                 periodIdx={actualIndex}
                 dayLessonIndex={dayLessonIndex}
+                overlayIndexByDay={overlayIndexByDay}
                 colorMap={colorMap}
                 selectedDayIdx={selectedDayIdx}
                 selectedPeriodIdx={selectedPeriodIdx}
                 selectedLessonIdx={selectedLessonIdx}
-                selectedRange={selectedRange}
                 currentPeriodIdx={currentPeriodIdx}
                 compact={compact}
                 timeColumnWidth={timeColumnWidth}
@@ -304,7 +317,9 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       <TimetableDetails
         bottomDividerLine={bottomDividerLine}
         selectedLesson={selectedLesson}
-        selectedRangeTime={selectedRangeTime}
+        selectedLessonPosition={selectedLessonPosition}
+        selectedLessonCount={selectedLessonCount}
+        overlappingLessons={overlappingLessons}
         termWidth={termWidth}
       />
 

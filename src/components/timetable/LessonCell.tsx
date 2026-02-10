@@ -8,6 +8,7 @@ interface LessonCellProps {
   stripeColor: string;
   isFocused: boolean;
   contentWidth: number;
+  titleSuffix?: string;
 }
 
 const LessonCell = memo(function LessonCell({
@@ -15,11 +16,14 @@ const LessonCell = memo(function LessonCell({
   stripeColor,
   isFocused,
   contentWidth,
+  titleSuffix,
 }: LessonCellProps) {
   const { lesson, continuation } = entry;
   const startsHere = continuation === "single" || continuation === "start";
   const continuesDown = continuation === "start" || continuation === "middle";
-  const title = startsHere ? lesson.subject : "";
+  const title = startsHere
+    ? `${lesson.subject}${titleSuffix ? ` ${titleSuffix}` : ""}`
+    : "";
   const meta = startsHere
     ? `${lesson.room || "?"}${lesson.teacher ? ` ${lesson.teacher}` : ""}`
     : "";

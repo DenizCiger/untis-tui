@@ -4,6 +4,7 @@ import type { Config } from "./config.ts";
 import { getCachedWeek, saveWeekToCache } from "./cache.ts";
 
 export interface ParsedLesson {
+  instanceId: string;
   subject: string;
   subjectLongName: string;
   teacher: string;
@@ -57,7 +58,12 @@ const DAY_NAMES = [
   "Saturday",
 ];
 
-function parseTimetableEntry(entry: WebAPITimetable): ParsedLesson {
+function parseTimetableEntry(
+  entry: WebAPITimetable,
+  indexInDay: number,
+  dateNum: number,
+): ParsedLesson {
+  const entryAny = entry as any;
   const subject = entry.subjects?.[0]?.element?.name || "Unknown";
   const subjectLongName = entry.subjects?.[0]?.element?.longName || subject;
   
@@ -67,7 +73,16 @@ function parseTimetableEntry(entry: WebAPITimetable): ParsedLesson {
   const room = entry.rooms?.[0]?.element?.name || "";
   const roomLongName = entry.rooms?.[0]?.element?.longName || room;
 
+  const instanceId =
+    String(
+      entryAny.id ??
+        entryAny.lessonId ??
+        entryAny.lstid ??
+        `${dateNum}-${entry.startTime}-${entry.endTime}-${subject}-${teacher}-${room}-${indexInDay}`,
+    );
+
   return {
+    instanceId,
     subject,
     subjectLongName,
     teacher,
@@ -78,7 +93,7 @@ function parseTimetableEntry(entry: WebAPITimetable): ParsedLesson {
     endTime: formatUntisTime(entry.endTime),
     cancelled: (entry.is?.standard === false && entry.cellState === "SUBSTITUTION") || entry.lessonCode === "cancelled",
     substitution: entry.is?.substitution === true,
-    remarks: (entry as any).info || (entry as any).substitutionText || "",
+    remarks: entryAny.info || entryAny.substitutionText || "",
   };
 }
 
@@ -160,7 +175,7 @@ export async function fetchWeekTimetable(
       days.push({
         date: dayDate,
         dayName: DAY_NAMES[dayDate.getDay()] || "Unknown",
-        lessons: entries.map(parseTimetableEntry),
+        lessons: entries.map((entry, idx) => parseTimetableEntry(entry, idx, dateNum)),
       });
     }
 

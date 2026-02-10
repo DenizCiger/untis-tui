@@ -1,7 +1,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import type { WeekTimetable } from "./untis.ts";
+import type { ParsedLesson, WeekTimetable } from "./untis.ts";
 
 const CACHE_DIR = join(homedir(), ".config", "tui-untis");
 const CACHE_FILE = join(CACHE_DIR, "cache.json");
@@ -41,12 +41,31 @@ export function getCachedWeek(mondayStr: string): WeekTimetable | null {
       ...week.data,
       days: week.data.days.map(day => ({
         ...day,
-        date: new Date(day.date)
+        date: new Date(day.date),
+        lessons: day.lessons.map((lesson, index) =>
+          ensureLessonInstanceId(lesson, day.date, index),
+        ),
       }))
     };
   } catch {
     return null;
   }
+}
+
+function ensureLessonInstanceId(
+  lesson: ParsedLesson,
+  dayDate: Date,
+  indexInDay: number,
+): ParsedLesson {
+  if (lesson.instanceId) {
+    return lesson;
+  }
+
+  const datePart = new Date(dayDate).toISOString().slice(0, 10);
+  return {
+    ...lesson,
+    instanceId: `${datePart}-${lesson.startTime}-${lesson.endTime}-${lesson.subject}-${lesson.teacher}-${lesson.room}-${indexInDay}`,
+  };
 }
 
 export function saveWeekToCache(mondayStr: string, data: WeekTimetable): void {

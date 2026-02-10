@@ -6,16 +6,30 @@ import { truncateText } from "./text.ts";
 interface TimetableDetailsProps {
   bottomDividerLine: string;
   selectedLesson: ParsedLesson | null;
-  selectedRangeTime: string | null;
+  selectedLessonPosition: number;
+  selectedLessonCount: number;
+  overlappingLessons: ParsedLesson[];
   termWidth: number;
 }
 
 export default function TimetableDetails({
   bottomDividerLine,
   selectedLesson,
-  selectedRangeTime,
+  selectedLessonPosition,
+  selectedLessonCount,
+  overlappingLessons,
   termWidth,
 }: TimetableDetailsProps) {
+  const siblingLabel = truncateText(
+    overlappingLessons
+      .map(
+        (lesson) =>
+          `${lesson.subject}${lesson.room ? ` ${lesson.room}` : ""}${lesson.teacher ? ` ${lesson.teacher}` : ""}`,
+      )
+      .join(" | "),
+    Math.max(10, termWidth - 10),
+  );
+
   return (
     <Box marginTop={0} paddingX={0} flexDirection="column" minHeight={4}>
       <Box>
@@ -31,36 +45,66 @@ export default function TimetableDetails({
               )}
             </Text>
             <Text color="yellow">
-              {selectedRangeTime || `${selectedLesson.startTime} - ${selectedLesson.endTime}`}
+              {selectedLesson.startTime} - {selectedLesson.endTime}
             </Text>
           </Box>
+
+          {selectedLessonCount > 1 && (
+            <Box>
+              <Text color="yellow" dimColor>
+                Overlap {selectedLessonPosition}/{selectedLessonCount}
+              </Text>
+            </Box>
+          )}
 
           <Box>
             <Text dimColor>Teacher · </Text>
             <Text>
               {truncateText(
-                selectedLesson.teacherLongName || selectedLesson.teacher || "N/A",
+                selectedLesson.teacherLongName ||
+                  selectedLesson.teacher ||
+                  "N/A",
                 Math.max(10, termWidth - 24),
               )}
             </Text>
-            <Text dimColor>  Room · </Text>
-            <Text>{truncateText(selectedLesson.room || "N/A", 10)}</Text>
+            <Text dimColor> Room · </Text>
+            <Text>
+              {truncateText(
+                selectedLesson.roomLongName
+                  ? `${selectedLesson.room} (${selectedLesson.roomLongName})`
+                  : selectedLesson.room || "N/A",
+                40,
+              )}
+            </Text>
           </Box>
 
           <Box height={2}>
             {selectedLesson.remarks ? (
               <Text color="magenta" italic>
-                ℹ {truncateText(selectedLesson.remarks, Math.max(10, termWidth - 8))}
+                ℹ{" "}
+                {truncateText(
+                  selectedLesson.remarks,
+                  Math.max(10, termWidth - 8),
+                )}
               </Text>
             ) : selectedLesson.cancelled ? (
               <Text color="red" bold>
                 CANCELLED
               </Text>
+            ) : overlappingLessons.length > 0 ? (
+              <Text dimColor>
+                Also: {siblingLabel}
+              </Text>
             ) : null}
           </Box>
         </Box>
       ) : (
-        <Box justifyContent="center" alignItems="center" flexGrow={1} paddingX={1}>
+        <Box
+          justifyContent="center"
+          alignItems="center"
+          flexGrow={1}
+          paddingX={1}
+        >
           <Text dimColor>Select a lesson to see details</Text>
         </Box>
       )}
