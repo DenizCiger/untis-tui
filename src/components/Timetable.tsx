@@ -137,10 +137,45 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
     return (day.get(period.startTime) ?? EMPTY_LESSONS).length;
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx]);
 
-  const selectedLessonPosition =
-    selectedLessonCount > 0
-      ? Math.min(selectedLessonIdx + 1, selectedLessonCount)
-      : 0;
+  const selectedEntry = useMemo(() => {
+    if (!data) return null;
+
+    const day = dayLessonIndex[selectedDayIdx];
+    const period = data.timegrid[selectedPeriodIdx];
+    if (!day || !period) return null;
+
+    return (day.get(period.startTime) ?? EMPTY_LESSONS)[selectedLessonIdx] ?? null;
+  }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLessonIdx]);
+
+  const selectedLessonPosition = useMemo(() => {
+    if (!data || selectedLessonCount <= 0) return 0;
+
+    const period = data.timegrid[selectedPeriodIdx];
+    const overlay = overlayIndexByDay[selectedDayIdx]?.get(period?.startTime ?? "");
+    if (overlay?.split && selectedEntry) {
+      const laneIdx = overlay.lanes.findIndex(
+        (entry) =>
+          entry?.continuityKey === selectedEntry.continuityKey ||
+          entry?.lessonInstanceId === selectedEntry.lessonInstanceId,
+      );
+
+      if (laneIdx !== -1) {
+        const position =
+          overlay.lanes.slice(0, laneIdx).filter((entry) => !!entry).length + 1;
+        return Math.min(position, selectedLessonCount);
+      }
+    }
+
+    return Math.min(selectedLessonIdx + 1, selectedLessonCount);
+  }, [
+    data,
+    overlayIndexByDay,
+    selectedDayIdx,
+    selectedEntry,
+    selectedLessonCount,
+    selectedLessonIdx,
+    selectedPeriodIdx,
+  ]);
 
   const overlappingLessons = useMemo(() => {
     if (!data || !selectedLesson) return [];
