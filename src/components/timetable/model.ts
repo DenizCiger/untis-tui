@@ -318,13 +318,22 @@ function shouldReserveSplitForSingle(
   const previousEntries = previousStart ? dayIndex.get(previousStart) ?? EMPTY_LESSONS : EMPTY_LESSONS;
   const nextEntries = nextStart ? dayIndex.get(nextStart) ?? EMPTY_LESSONS : EMPTY_LESSONS;
 
+  const continuityKey = entry.continuityKey;
   const lessonId = entry.lessonInstanceId;
   const previousHasOverlap =
     previousEntries.length > 1 &&
-    previousEntries.some((other) => other.lessonInstanceId === lessonId);
+    previousEntries.some(
+      (other) =>
+        other.continuityKey === continuityKey ||
+        other.lessonInstanceId === lessonId,
+    );
   const nextHasOverlap =
     nextEntries.length > 1 &&
-    nextEntries.some((other) => other.lessonInstanceId === lessonId);
+    nextEntries.some(
+      (other) =>
+        other.continuityKey === continuityKey ||
+        other.lessonInstanceId === lessonId,
+    );
 
   return previousHasOverlap || nextHasOverlap;
 }

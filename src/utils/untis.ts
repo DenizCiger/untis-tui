@@ -97,6 +97,66 @@ function parseTimetableEntry(
   };
 }
 
+function getElementIds(
+  elements:
+    | Array<{ id?: number; element?: { id?: number } }>
+    | { id?: number; element?: { id?: number } }
+    | undefined,
+): string {
+  if (!elements) return "";
+  const list = Array.isArray(elements) ? elements : [elements];
+  if (list.length === 0) return "";
+
+  return list
+    .map((item) => String(item.id ?? item.element?.id ?? ""))
+    .filter(Boolean)
+    .sort()
+    .join(",");
+}
+
+function buildDuplicateEntryKey(entry: WebAPITimetable): string {
+  const entryAny = entry as any;
+  const isFlags = entry.is
+    ? Object.entries(entry.is)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .sort()
+        .join(",")
+    : "";
+
+  return [
+    String(entry.date),
+    String(entry.startTime),
+    String(entry.endTime),
+    String(entryAny.lessonId ?? entryAny.lstid ?? ""),
+    String(entry.lessonCode ?? ""),
+    String(entry.cellState ?? ""),
+    getElementIds(entry.subjects as any),
+    getElementIds(entry.teachers as any),
+    getElementIds(entry.rooms as any),
+    getElementIds((entry as any).klassen),
+    getElementIds((entry as any).studentGroup),
+    isFlags,
+  ].join("|");
+}
+
+function dedupeDayEntries(entries: WebAPITimetable[]): WebAPITimetable[] {
+  const seen = new Set<string>();
+  const deduped: WebAPITimetable[] = [];
+
+  for (const entry of entries) {
+    const key = buildDuplicateEntryKey(entry);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(entry);
+  }
+
+  return deduped;
+}
+
 export function getMonday(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay();
@@ -168,7 +228,7 @@ export async function fetchWeekTimetable(
         `${dayDate.getFullYear()}${(dayDate.getMonth() + 1).toString().padStart(2, "0")}${dayDate.getDate().toString().padStart(2, "0")}`
       );
 
-      const entries = byDate.get(dateNum) || [];
+      const entries = dedupeDayEntries(byDate.get(dateNum) || []);
       // Sort by start time
       entries.sort((a, b) => a.startTime - b.startTime);
 
