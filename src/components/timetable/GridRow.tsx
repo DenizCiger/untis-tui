@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { TimeUnit } from "../../utils/untis.ts";
+import { COLORS } from "../colors.ts";
 import LessonCell from "./LessonCell.tsx";
 import {
   type DayLessonIndex,
@@ -49,7 +50,10 @@ export default function GridRow({
         flexDirection="column"
         height={3}
       >
-        <Text bold color={periodIdx === currentPeriodIdx ? "cyan" : "yellow"}>
+        <Text
+          bold
+          color={periodIdx === currentPeriodIdx ? COLORS.brand : COLORS.warning}
+        >
           {truncateText(period.name, compact ? 8 : 12)}
         </Text>
         <Text dimColor>{compact ? period.startTime.slice(0, 5) : period.startTime}</Text>
@@ -123,17 +127,23 @@ export default function GridRow({
               {!hasLessons ? (
                 isAnchorFocused ? (
                   <Box flexGrow={1} flexDirection="column" justifyContent="center">
-                    <Text backgroundColor="white" color="black">
+                    <Text
+                      backgroundColor={COLORS.selection.emptyCellBackground}
+                      color={COLORS.neutral.black}
+                    >
                       {" ".repeat(contentWidth + 1)}
                     </Text>
-                    <Text backgroundColor="white" color="black">
+                    <Text
+                      backgroundColor={COLORS.selection.emptyCellBackground}
+                      color={COLORS.neutral.black}
+                    >
                       {" ".repeat(contentWidth + 1)}
                     </Text>
                     <Text>{" ".repeat(contentWidth + 1)}</Text>
                   </Box>
                 ) : (
                   <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
-                    <Text color="gray" dimColor>
+                    <Text color={COLORS.neutral.gray} dimColor>
                       .
                     </Text>
                   </Box>
@@ -184,7 +194,12 @@ export default function GridRow({
                 </Box>
               ) : showOverlapPreview ? (
                 <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
-                  <Text color={isAnchorFocused ? "yellow" : "white"} dimColor={!isAnchorFocused}>
+                  <Text
+                    color={
+                      isAnchorFocused ? COLORS.warning : COLORS.neutral.white
+                    }
+                    dimColor={!isAnchorFocused}
+                  >
                     {overlapPreviewLabel}
                   </Text>
                 </Box>

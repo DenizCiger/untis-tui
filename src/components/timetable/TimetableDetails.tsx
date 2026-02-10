@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ParsedLesson } from "../../utils/untis.ts";
+import { COLORS, getCellStateChipColors } from "../colors.ts";
 import { truncateText } from "./text.ts";
 
 interface TimetableDetailsProps {
@@ -53,7 +54,7 @@ export default function TimetableDetails({
         <Box flexDirection="column" paddingX={1}>
           <Box justifyContent="space-between">
             <Box flexDirection="row">
-              <Text bold color="cyan">
+              <Text bold color={COLORS.brand}>
                 {truncateText(
                   `${selectedLesson.subjectLongName} (${selectedLesson.subject})`,
                   Math.max(10, termWidth - 24 - chipReservedWidth),
@@ -71,29 +72,28 @@ export default function TimetableDetails({
                 </Box>
               ) : null}
             </Box>
-            <Text color="yellow">
+            <Text color={COLORS.warning}>
               {selectedLesson.startTime} - {selectedLesson.endTime}
             </Text>
           </Box>
 
           {selectedLessonCount > 1 && (
             <Box>
-              <Text color="yellow" dimColor>
+              <Text color={COLORS.warning} dimColor>
                 Overlap {selectedLessonPosition}/{selectedLessonCount}
               </Text>
             </Box>
           )}
 
           <Box>
-            <Text dimColor>Teacher · </Text>
-            <Text>
-              {truncateText(
-                selectedLesson.teacherLongName ||
-                  selectedLesson.teacher ||
-                  "N/A",
-                Math.max(10, termWidth - 24),
-              )}
+            <Text dimColor>
+              {" "}
+              Teacher{selectedLesson.allTeachers.length > 1 ? "s" : ""} ·{" "}
             </Text>
+            <Text>{teachersLabel}</Text>
+          </Box>
+
+          <Box>
             <Text dimColor> Room · </Text>
             <Text>
               {truncateText(
@@ -103,11 +103,6 @@ export default function TimetableDetails({
                 40,
               )}
             </Text>
-          </Box>
-
-          <Box>
-            <Text dimColor>All teachers · </Text>
-            <Text>{teachersLabel}</Text>
           </Box>
 
           <Box>
@@ -129,7 +124,7 @@ export default function TimetableDetails({
 
           <Box height={2}>
             {selectedLesson.remarks ? (
-              <Text color="magenta" italic>
+              <Text color={COLORS.info} italic>
                 ℹ{" "}
                 {truncateText(
                   selectedLesson.remarks,
@@ -137,7 +132,7 @@ export default function TimetableDetails({
                 )}
               </Text>
             ) : selectedLesson.cancelled ? (
-              <Text color="red" bold>
+              <Text color={COLORS.error} bold>
                 CANCELLED
               </Text>
             ) : overlappingLessons.length > 0 ? (
@@ -157,25 +152,4 @@ export default function TimetableDetails({
       )}
     </Box>
   );
-}
-
-function getCellStateChipColors(cellState: string): {
-  backgroundColor: "red" | "yellow" | "green" | "greenBright" | "blue" | "gray";
-  color: "black" | "white";
-} {
-  const normalized = cellState.toUpperCase();
-
-  switch (normalized) {
-    case "EXAM":
-      return { backgroundColor: "yellow", color: "white" };
-    case "CONFIRMED":
-      return { backgroundColor: "green", color: "white" };
-    case "SUBSTITUTION":
-    case "ADDITIONAL":
-      return { backgroundColor: "greenBright", color: "white" };
-    case "CANCELLED":
-      return { backgroundColor: "red", color: "white" };
-    default:
-      return { backgroundColor: "gray", color: "white" };
-  }
 }

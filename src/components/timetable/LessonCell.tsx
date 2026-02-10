@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Box, Text } from "ink";
+import { COLORS } from "../colors.ts";
 import type { RenderLesson } from "./model.ts";
 import { fitText } from "./text.ts";
 
@@ -36,27 +37,25 @@ const LessonCell = memo(function LessonCell({
   const isExam = cellState === "EXAM";
   const isCancelled = lesson.cancelled || cellState === "CANCELLED";
 
-  const baseBg = isCancelled
-    ? "red"
+  const lessonType = isCancelled
+    ? "cancelled"
     : isExam
-      ? "yellow"
+      ? "exam"
       : isSubstitutionLike
-        ? "green"
-        : "blackBright";
-  const baseFg = "white";
+        ? "substitution"
+        : "default";
+  const lessonColors = COLORS.lesson.byType[lessonType];
 
-  const focusedBg =
-    baseBg === "red"
-      ? "redBright"
-      : baseBg === "yellow"
-        ? "yellowBright"
-        : baseBg === "green"
-          ? "greenBright"
-          : "white";
-  const focusedFg = "black";
+  const baseBg = lessonColors.background.base;
+  const baseFg = lessonColors.text.title;
+  const baseSubtextFg = lessonColors.text.subtext;
+  const focusedBg = lessonColors.background.focused;
+  const focusedFg = lessonColors.text.focusedTitle;
+  const focusedSubtextFg = lessonColors.text.focusedSubtext;
 
   const mainBg = isFocused ? focusedBg : baseBg;
   const mainFg = isFocused ? focusedFg : baseFg;
+  const subtextFg = isFocused ? focusedSubtextFg : baseSubtextFg;
 
   return (
     <Box
@@ -75,12 +74,12 @@ const LessonCell = memo(function LessonCell({
         <Text color={stripeColor}>▍</Text>
         {fitText(title, contentWidth)}
       </Text>
-      <Text backgroundColor={mainBg} color={mainFg}>
+      <Text backgroundColor={mainBg} color={subtextFg}>
         <Text color={stripeColor}>▍</Text>
         {fitText(meta, contentWidth)}
       </Text>
       {continuesDown ? (
-        <Text backgroundColor={baseBg} color={baseFg}>
+        <Text backgroundColor={baseBg} color={baseSubtextFg}>
           <Text color={stripeColor}>▍</Text>
           {" ".repeat(contentWidth)}
         </Text>

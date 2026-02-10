@@ -4,6 +4,7 @@ import type {
   TimeUnit,
   WeekTimetable,
 } from "../../utils/untis.ts";
+import { COLORS } from "../colors.ts";
 
 export type Continuation = "single" | "start" | "middle" | "end";
 
@@ -43,19 +44,12 @@ export type DayOverlayIndex = Map<string, OverlayPeriod>;
 
 export const EMPTY_LESSONS: RenderLesson[] = [];
 
-const STRIPE_COLORS: string[] = [
-  "cyan",
-  "green",
-  "yellow",
-  "magenta",
-  "blue",
-  "red",
-  "white",
-];
-
 export function getSubjectColor(subject: string, colorMap: Map<string, string>): string {
   if (!colorMap.has(subject)) {
-    colorMap.set(subject, STRIPE_COLORS[colorMap.size % STRIPE_COLORS.length]!);
+    colorMap.set(
+      subject,
+      COLORS.subjectStripeCycle[colorMap.size % COLORS.subjectStripeCycle.length]!,
+    );
   }
 
   return colorMap.get(subject)!;

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useStdout } from "ink";
 import Spinner from "ink-spinner";
+import { COLORS } from "./colors.ts";
 import type { Config } from "../utils/config.ts";
 import GridRow from "./timetable/GridRow.tsx";
 import TimetableDetails from "./timetable/TimetableDetails.tsx";
@@ -233,7 +234,10 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                   <Text dimColor>│</Text>
                 </Box>
                 <Box width={Math.max(1, dayColumnWidth - 1)} paddingLeft={1} paddingRight={1}>
-                  <Text bold color={idx === todayIdx ? "cyan" : "white"}>
+                  <Text
+                    bold
+                    color={idx === todayIdx ? COLORS.brand : COLORS.neutral.white}
+                  >
                     {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}
                   </Text>
                 </Box>
@@ -248,13 +252,13 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
 
       {loading ? (
         <Box justifyContent="center" marginTop={1} alignItems="center">
-          <Text color="yellow">
+          <Text color={COLORS.warning}>
             <Spinner type="dots" /> Loading timetable...
           </Text>
         </Box>
       ) : error ? (
         <Box justifyContent="center">
-          <Text color="red">Error: {error} (press r to retry)</Text>
+          <Text color={COLORS.error}>Error: {error} (press r to retry)</Text>
         </Box>
       ) : data ? (
         <Box flexDirection="column">

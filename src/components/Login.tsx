@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
+import { COLORS } from "./colors.ts";
 import type { Config } from "../utils/config.ts";
 import { testCredentials } from "../utils/untis.ts";
 
@@ -93,7 +94,7 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
   return (
     <Box flexDirection="column" padding={1}>
       <Box marginBottom={1}>
-        <Text bold color="cyan">
+        <Text bold color={COLORS.brand}>
           WebUntis TUI - Login
         </Text>
       </Box>
@@ -108,7 +109,7 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
         <Box key={field.key} marginBottom={0}>
           <Box width={12}>
             <Text
-              color={index === activeField ? "cyan" : "white"}
+              color={index === activeField ? COLORS.brand : COLORS.neutral.white}
               bold={index === activeField}
             >
               {index === activeField ? "> " : "  "}
@@ -148,16 +149,16 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
 
       {loading && (
         <Box marginTop={1}>
-          <Text color="yellow">
+          <Text color={COLORS.warning}>
             <Spinner type="dots" />
           </Text>
-          <Text color="yellow"> Authenticating...</Text>
+          <Text color={COLORS.warning}> Authenticating...</Text>
         </Box>
       )}
 
       {error && (
         <Box marginTop={1}>
-          <Text color="red">{error}</Text>
+          <Text color={COLORS.error}>{error}</Text>
         </Box>
       )}
 
