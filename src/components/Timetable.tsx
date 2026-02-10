@@ -162,6 +162,26 @@ function fitText(value: string, width: number): string {
   return truncateText(value, width).padEnd(Math.max(0, width), " ");
 }
 
+function centerText(value: string, width: number): string {
+  const clipped = truncateText(value, width);
+  const pad = Math.max(0, width - clipped.length);
+  const left = Math.floor(pad / 2);
+  const right = pad - left;
+  return `${" ".repeat(left)}${clipped}${" ".repeat(right)}`;
+}
+
+function buildGridDivider(
+  timeWidth: number,
+  dayWidth: number,
+  dayCount: number,
+  junction: string,
+): string {
+  return (
+    "─".repeat(timeWidth) +
+    Array.from({ length: dayCount }, () => `${junction}${"─".repeat(Math.max(1, dayWidth - 1))}`).join("")
+  );
+}
+
 const LessonCell = memo(function LessonCell({
   entry,
   stripeColor,
@@ -341,7 +361,7 @@ function GridRow({
           !!selectedRange &&
           periodIdx >= selectedRange.startPeriodIdx &&
           periodIdx <= selectedRange.endPeriodIdx;
-        const contentWidth = Math.max(4, dayColumnWidth - 1);
+        const contentWidth = Math.max(4, dayColumnWidth - 2);
 
         const hasLessons = lessonsInPeriod.length > 0;
         const rangeEntry =
@@ -365,44 +385,51 @@ function GridRow({
             height={3}
             flexDirection="row"
           >
-            {!hasLessons ? (
-              isAnchorFocused ? (
-                <Box flexGrow={1} flexDirection="column" justifyContent="center">
-                  <Text backgroundColor="white" color="black">
-                    {" ".repeat(contentWidth + 1)}
-                  </Text>
-                  <Text backgroundColor="white" color="black">
-                    {" ".repeat(contentWidth + 1)}
-                  </Text>
-                  <Text backgroundColor="white" color="black">
-                    {" ".repeat(contentWidth + 1)}
+            <Box width={1} flexDirection="column">
+              <Text dimColor>│</Text>
+              <Text dimColor>│</Text>
+              <Text dimColor>│</Text>
+            </Box>
+            <Box width={Math.max(1, dayColumnWidth - 1)} flexDirection="row">
+              {!hasLessons ? (
+                isAnchorFocused ? (
+                  <Box flexGrow={1} flexDirection="column" justifyContent="center">
+                    <Text backgroundColor="white" color="black">
+                      {" ".repeat(contentWidth + 1)}
+                    </Text>
+                    <Text backgroundColor="white" color="black">
+                      {" ".repeat(contentWidth + 1)}
+                    </Text>
+                    <Text>
+                      {" ".repeat(contentWidth + 1)}
+                    </Text>
+                  </Box>
+                ) : (
+                  <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
+                    <Text color="gray" dimColor>
+                      .
+                    </Text>
+                  </Box>
+                )
+              ) : showOverlapCount ? (
+                <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
+                  <Text color={isAnchorFocused ? "yellow" : "white"} dimColor={!isAnchorFocused}>
+                    {lessonsInPeriod.length}x
                   </Text>
                 </Box>
               ) : (
-                <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
-                  <Text color="gray" dimColor>
-                    .
-                  </Text>
-                </Box>
-              )
-            ) : showOverlapCount ? (
-              <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
-                <Text color={isAnchorFocused ? "yellow" : "white"} dimColor={!isAnchorFocused}>
-                  {lessonsInPeriod.length}x
-                </Text>
-              </Box>
-            ) : (
-              displayedLessons.map((entry, index) => (
-                <LessonCell
-                  key={`lesson-${dayIdx}-${periodIdx}-${index}`}
-                  entry={entry}
-                  stripeColor={getSubjectColor(entry.lesson.subject, colorMap)}
-                  isFocused={isRangeFocused}
-                  compact={compact}
-                  contentWidth={contentWidth}
-                />
-              ))
-            )}
+                displayedLessons.map((entry, index) => (
+                  <LessonCell
+                    key={`lesson-${dayIdx}-${periodIdx}-${index}`}
+                    entry={entry}
+                    stripeColor={getSubjectColor(entry.lesson.subject, colorMap)}
+                    isFocused={isRangeFocused}
+                    compact={compact}
+                    contentWidth={contentWidth}
+                  />
+                ))
+              )}
+            </Box>
           </Box>
         );
       })}
@@ -711,15 +738,15 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
 
   const footerText = useMemo(() => {
     if (compact) {
-      return "[Arrows] [Shift+<-/->] [Tab] [h] [t] [r] [q]";
+      return "[←↑↓→] [Shift+←/→] [Tab] [h] [t] [r] [q]";
     }
 
-    return "[Arrows Nav] [Shift+<-/-> Week] [Tab Overlap] [h Help] [t Today] [r Refresh] [q Quit]";
+    return "[←↑↓→ Navigate] [Shift+←/→ Week] [Tab Overlap] [h Help] [t Today] [r Refresh] [q Quit]";
   }, [compact]);
 
-  const dividerLine = "-".repeat(
-    Math.max(10, timeColumnWidth + dayColumnWidth * 5),
-  );
+  const dividerLine = "─".repeat(Math.max(10, timeColumnWidth + dayColumnWidth * 5));
+  const headerDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┼");
+  const bottomDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┴");
 
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight} paddingX={0}>
@@ -748,15 +775,14 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       </Box>
 
       <Box justifyContent="center">
-        <Text dimColor>{"<-- "}</Text>
+        <Text dimColor>{"‹ "}</Text>
         <Text bold>
           {formatDate(currentMonday)} - {formatDate(currentFriday)}
         </Text>
-        <Text dimColor>{" -->"}</Text>
+        <Text dimColor>{" ›"}</Text>
         {weekOffset === 0 && !compact && (
           <Text color="cyan" bold>
-            {" "}
-            (This week)
+            {"  • This week"}
           </Text>
         )}
       </Box>
@@ -771,21 +797,20 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
             </Box>
 
             {data.days.map((day, idx) => (
-              <Box
-                key={`header-day-${idx}`}
-                width={dayColumnWidth}
-                paddingLeft={1}
-                paddingRight={1}
-              >
-                <Text bold color={idx === todayIdx ? "cyan" : "white"}>
-                  {idx === 0 ? "" : "| "}
-                  {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}
-                </Text>
+              <Box key={`header-day-${idx}`} width={dayColumnWidth} flexDirection="row">
+                <Box width={1}>
+                  <Text dimColor>│</Text>
+                </Box>
+                <Box width={Math.max(1, dayColumnWidth - 1)} paddingLeft={1} paddingRight={1}>
+                  <Text bold color={idx === todayIdx ? "cyan" : "white"}>
+                    {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}
+                  </Text>
+                </Box>
               </Box>
             ))}
           </Box>
-          <Box paddingX={1}>
-            <Text dimColor>{dividerLine}</Text>
+          <Box>
+            <Text dimColor>{headerDividerLine}</Text>
           </Box>
         </Box>
       )}
@@ -803,8 +828,22 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       ) : data ? (
         <Box flexDirection="column">
           {scrollOffset > 0 && (
-            <Box justifyContent="center" height={1}>
-              <Text dimColor>^ ({scrollOffset} more periods) ^</Text>
+            <Box flexDirection="row" height={1}>
+              <Box width={timeColumnWidth} />
+              {data.days.map((_, idx) => (
+                <Box key={`more-top-${idx}`} width={dayColumnWidth} flexDirection="row">
+                  <Box width={1}>
+                    <Text dimColor>│</Text>
+                  </Box>
+                  <Box width={Math.max(1, dayColumnWidth - 1)}>
+                    <Text dimColor>
+                      {idx === 2
+                        ? centerText(`▲ ${scrollOffset} more ▲`, Math.max(1, dayColumnWidth - 1))
+                        : " ".repeat(Math.max(1, dayColumnWidth - 1))}
+                    </Text>
+                  </Box>
+                </Box>
+              ))}
             </Box>
           )}
 
@@ -831,27 +870,58 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
           })}
 
           {scrollOffset + rowsPerPage < data.timegrid.length && (
-            <Box justifyContent="center" height={1}>
-              <Text dimColor>
-                v ({data.timegrid.length - (scrollOffset + rowsPerPage)} more periods) v
-              </Text>
+            <Box flexDirection="row" height={1}>
+              <Box width={timeColumnWidth} />
+              {data.days.map((_, idx) => (
+                <Box key={`more-bottom-${idx}`} width={dayColumnWidth} flexDirection="row">
+                  <Box width={1}>
+                    <Text dimColor>│</Text>
+                  </Box>
+                  <Box width={Math.max(1, dayColumnWidth - 1)}>
+                    <Text dimColor>
+                      {idx === 2
+                        ? centerText(
+                            `▼ ${data.timegrid.length - (scrollOffset + rowsPerPage)} more ▼`,
+                            Math.max(1, dayColumnWidth - 1),
+                          )
+                        : " ".repeat(Math.max(1, dayColumnWidth - 1))}
+                    </Text>
+                  </Box>
+                </Box>
+              ))}
             </Box>
           )}
 
-          <Box justifyContent="center">
-            <Text dimColor>
-              Focus: {selectedDayName} / {selectedPeriodName}
-              {selectedLessonCount > 1
-                ? ` (${selectedLessonIdx + 1}/${selectedLessonCount})`
-                : ""}
-            </Text>
+          <Box flexDirection="row" height={1}>
+            <Box width={timeColumnWidth} />
+            {data.days.map((_, idx) => (
+              <Box key={`focus-row-${idx}`} width={dayColumnWidth} flexDirection="row">
+                <Box width={1}>
+                  <Text dimColor>│</Text>
+                </Box>
+                <Box width={Math.max(1, dayColumnWidth - 1)}>
+                  <Text dimColor>
+                    {idx === 2
+                      ? centerText(
+                          `Focus: ${selectedDayName} / ${selectedPeriodName}${
+                            selectedLessonCount > 1
+                              ? ` (${selectedLessonIdx + 1}/${selectedLessonCount})`
+                              : ""
+                          }`,
+                          Math.max(1, dayColumnWidth - 1),
+                        )
+                      : " ".repeat(Math.max(1, dayColumnWidth - 1))}
+                  </Text>
+                </Box>
+              </Box>
+            ))}
           </Box>
         </Box>
       ) : null}
 
-      <Box marginTop={0} paddingX={1} flexDirection="column" minHeight={4}>
-        <Box paddingX={1}>
-          <Text dimColor>{dividerLine}</Text>
+      <Box marginTop={0} paddingX={0} flexDirection="column" minHeight={4}>
+        <Box>
+          <Text dimColor>{bottomDividerLine}</Text>
         </Box>
         {selectedLesson ? (
           <Box flexDirection="column" paddingX={1}>
@@ -868,7 +938,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
             </Box>
 
             <Box>
-              <Text dimColor>Teacher: </Text>
+              <Text dimColor>Teacher · </Text>
               <Text>
                 {truncateText(
                   selectedLesson.teacherLongName ||
@@ -877,14 +947,14 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                   Math.max(10, termWidth - 24),
                 )}
               </Text>
-              <Text dimColor> Room: </Text>
+              <Text dimColor>  Room · </Text>
               <Text>{truncateText(selectedLesson.room || "N/A", 10)}</Text>
             </Box>
 
             <Box height={2}>
               {selectedLesson.remarks ? (
                 <Text color="magenta" italic>
-                  i {truncateText(selectedLesson.remarks, Math.max(10, termWidth - 8))}
+                  ℹ {truncateText(selectedLesson.remarks, Math.max(10, termWidth - 8))}
                 </Text>
               ) : selectedLesson.cancelled ? (
                 <Text color="red" bold>
