@@ -24,11 +24,38 @@ type Continuation = "single" | "start" | "middle" | "end";
 interface RenderLesson {
   lesson: ParsedLesson;
   continuation: Continuation;
+  lessonKey: string;
+  occurrence: number;
+}
+
+interface SelectedLessonRange {
+  lesson: ParsedLesson;
+  lessonKey: string;
+  occurrence: number;
+  startPeriodIdx: number;
+  endPeriodIdx: number;
 }
 
 type DayLessonIndex = Map<string, RenderLesson[]>;
 
 const EMPTY_LESSONS: RenderLesson[] = [];
+
+const STRIPE_COLORS: string[] = [
+  "cyan",
+  "green",
+  "yellow",
+  "magenta",
+  "blue",
+  "red",
+  "white",
+];
+
+function getSubjectColor(subject: string, colorMap: Map<string, string>): string {
+  if (!colorMap.has(subject)) {
+    colorMap.set(subject, STRIPE_COLORS[colorMap.size % STRIPE_COLORS.length]!);
+  }
+  return colorMap.get(subject)!;
+}
 
 function getLessonKey(lesson: ParsedLesson): string {
   return [
@@ -112,6 +139,8 @@ function indexLessonsByPeriod(
         return {
           lesson,
           continuation,
+          lessonKey: key,
+          occurrence,
         };
       });
 
@@ -129,19 +158,33 @@ function truncateText(value: string, maxWidth: number): string {
   return `${value.slice(0, maxWidth - 3)}...`;
 }
 
+function fitText(value: string, width: number): string {
+  return truncateText(value, width).padEnd(Math.max(0, width), " ");
+}
+
 const LessonCell = memo(function LessonCell({
   entry,
+  stripeColor,
+  isFocused,
   compact,
+  contentWidth,
 }: {
   entry: RenderLesson;
+  stripeColor: string;
+  isFocused: boolean;
   compact: boolean;
+  contentWidth: number;
 }) {
   const { lesson, continuation } = entry;
   const startsHere = continuation === "single" || continuation === "start";
-  const title = startsHere ? lesson.subject : "|";
+  const continuesDown = continuation === "start" || continuation === "middle";
+  const title = startsHere ? lesson.subject : "";
   const meta = startsHere
     ? `${lesson.room || "?"}${lesson.teacher ? ` ${lesson.teacher}` : ""}`
-    : "continued";
+    : "";
+
+  const bg = isFocused ? "white" : "blackBright";
+  const fg = isFocused ? "black" : "white";
 
   return (
     <Box
@@ -149,20 +192,32 @@ const LessonCell = memo(function LessonCell({
       flexBasis={0}
       height={3}
       flexDirection="column"
-      paddingX={1}
       justifyContent="center"
-      backgroundColor="gray"
     >
       <Text
-        color={lesson.cancelled ? "black" : "white"}
+        backgroundColor={bg}
+        color={fg}
         bold={startsHere}
         strikethrough={lesson.cancelled && startsHere}
       >
-        {truncateText(title, compact ? 10 : 14)}
+        <Text color={stripeColor}>▍</Text>
+        {fitText(title, contentWidth)}
       </Text>
-      <Text color="black" dimColor>
-        {truncateText(meta, compact ? 10 : 18)}
+      <Text backgroundColor={bg} color={fg}>
+        <Text color={stripeColor}>▍</Text>
+        {fitText(meta, contentWidth)}
       </Text>
+      {continuesDown ? (
+        <Text backgroundColor={bg} color={fg}>
+          <Text color={stripeColor}>▍</Text>
+          {" ".repeat(contentWidth)}
+        </Text>
+      ) : (
+        <Text>
+          <Text color={stripeColor}> </Text>
+          {" ".repeat(contentWidth)}
+        </Text>
+      )}
     </Box>
   );
 });
@@ -179,35 +234,96 @@ function findCurrentPeriodIndex(timegrid: TimeUnit[]): number {
   );
 }
 
+function getSelectedLessonRange(
+  data: WeekTimetable,
+  dayLessonIndex: DayLessonIndex[],
+  selectedDayIdx: number,
+  selectedPeriodIdx: number,
+  selectedLessonIdx: number,
+): SelectedLessonRange | null {
+  const dayIndex = dayLessonIndex[selectedDayIdx];
+  const period = data.timegrid[selectedPeriodIdx];
+  if (!dayIndex || !period) return null;
+
+  const entries = dayIndex.get(period.startTime) ?? EMPTY_LESSONS;
+  const selectedEntry = entries[selectedLessonIdx];
+  if (!selectedEntry) return null;
+
+  let startPeriodIdx = selectedPeriodIdx;
+  let endPeriodIdx = selectedPeriodIdx;
+
+  while (startPeriodIdx > 0) {
+    const prevPeriod = data.timegrid[startPeriodIdx - 1];
+    if (!prevPeriod) break;
+    const prevEntries = dayIndex.get(prevPeriod.startTime) ?? EMPTY_LESSONS;
+    const match = prevEntries.find(
+      (entry) =>
+        entry.lessonKey === selectedEntry.lessonKey &&
+        entry.occurrence === selectedEntry.occurrence,
+    );
+    if (!match) break;
+    startPeriodIdx -= 1;
+  }
+
+  while (endPeriodIdx < data.timegrid.length - 1) {
+    const nextPeriod = data.timegrid[endPeriodIdx + 1];
+    if (!nextPeriod) break;
+    const nextEntries = dayIndex.get(nextPeriod.startTime) ?? EMPTY_LESSONS;
+    const match = nextEntries.find(
+      (entry) =>
+        entry.lessonKey === selectedEntry.lessonKey &&
+        entry.occurrence === selectedEntry.occurrence,
+    );
+    if (!match) break;
+    endPeriodIdx += 1;
+  }
+
+  return {
+    lesson: selectedEntry.lesson,
+    lessonKey: selectedEntry.lessonKey,
+    occurrence: selectedEntry.occurrence,
+    startPeriodIdx,
+    endPeriodIdx,
+  };
+}
+
 function GridRow({
   period,
   periodIdx,
   dayLessonIndex,
+  colorMap,
   todayIdx,
   selectedDayIdx,
   selectedPeriodIdx,
   selectedLessonIdx,
+  selectedRange,
   currentPeriodIdx,
   compact,
+  timeColumnWidth,
+  dayColumnWidth,
 }: {
   period: TimeUnit;
   periodIdx: number;
   dayLessonIndex: DayLessonIndex[];
+  colorMap: Map<string, string>;
   todayIdx: number;
   selectedDayIdx: number;
   selectedPeriodIdx: number;
   selectedLessonIdx: number;
+  selectedRange: SelectedLessonRange | null;
   currentPeriodIdx: number;
   compact: boolean;
+  timeColumnWidth: number;
+  dayColumnWidth: number;
 }) {
   return (
     <Box flexDirection="row">
       <Box
-        width={compact ? 10 : 15}
-        paddingX={1}
+        width={timeColumnWidth}
+        paddingLeft={1}
+        paddingRight={1}
         justifyContent="center"
         flexDirection="column"
-        borderStyle="single"
         height={3}
       >
         <Text bold color={periodIdx === currentPeriodIdx ? "cyan" : "yellow"}>
@@ -218,52 +334,60 @@ function GridRow({
 
       {dayLessonIndex.map((dayIndex, dayIdx) => {
         const lessonsInPeriod = dayIndex.get(period.startTime) ?? EMPTY_LESSONS;
-        const isCellFocused =
+        const isAnchorFocused =
           dayIdx === selectedDayIdx && periodIdx === selectedPeriodIdx;
+        const isRangeFocused =
+          dayIdx === selectedDayIdx &&
+          !!selectedRange &&
+          periodIdx >= selectedRange.startPeriodIdx &&
+          periodIdx <= selectedRange.endPeriodIdx;
+        const contentWidth = Math.max(4, dayColumnWidth - 1);
 
         const hasLessons = lessonsInPeriod.length > 0;
+        const rangeEntry =
+          isRangeFocused && selectedRange
+            ? lessonsInPeriod.find(
+                (entry) =>
+                  entry.lessonKey === selectedRange.lessonKey &&
+                  entry.occurrence === selectedRange.occurrence,
+              ) ?? null
+            : null;
         const selectedEntry = lessonsInPeriod[selectedLessonIdx] ?? null;
-        const showOverlapCount = lessonsInPeriod.length > 1 && !isCellFocused;
+        const activeEntry = rangeEntry ?? selectedEntry;
+        const showOverlapCount = lessonsInPeriod.length > 1 && !isRangeFocused;
         const displayedLessons =
-          isCellFocused && selectedEntry ? [selectedEntry] : lessonsInPeriod;
-
-        const connectorEntry =
-          showOverlapCount || displayedLessons.length !== 1
-            ? null
-            : displayedLessons[0];
-
-        const borderTop = connectorEntry
-          ? connectorEntry.continuation !== "middle" &&
-            connectorEntry.continuation !== "end"
-          : true;
-        const borderBottom = connectorEntry
-          ? connectorEntry.continuation !== "middle" &&
-            connectorEntry.continuation !== "start"
-          : true;
+          isRangeFocused && activeEntry ? [activeEntry] : lessonsInPeriod;
 
         return (
           <Box
             key={`day-${periodIdx}-${dayIdx}`}
-            flexGrow={1}
-            flexBasis={0}
-            borderStyle="single"
-            borderColor={isCellFocused ? "yellow" : hasLessons ? "gray" : "black"}
-            borderTop={borderTop}
-            borderBottom={borderBottom}
-            borderLeft={true}
-            borderRight={true}
+            width={dayColumnWidth}
             height={3}
             flexDirection="row"
           >
             {!hasLessons ? (
-              <Box flexGrow={1} justifyContent="center" alignItems="center">
-                <Text color="gray" dimColor>
-                  .
-                </Text>
-              </Box>
+              isAnchorFocused ? (
+                <Box flexGrow={1} flexDirection="column" justifyContent="center">
+                  <Text backgroundColor="white" color="black">
+                    {" ".repeat(contentWidth + 1)}
+                  </Text>
+                  <Text backgroundColor="white" color="black">
+                    {" ".repeat(contentWidth + 1)}
+                  </Text>
+                  <Text backgroundColor="white" color="black">
+                    {" ".repeat(contentWidth + 1)}
+                  </Text>
+                </Box>
+              ) : (
+                <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
+                  <Text color="gray" dimColor>
+                    .
+                  </Text>
+                </Box>
+              )
             ) : showOverlapCount ? (
-              <Box flexGrow={1} justifyContent="center" alignItems="center">
-                <Text color="white" dimColor>
+              <Box flexGrow={1} justifyContent="center" alignItems="center" paddingX={1}>
+                <Text color={isAnchorFocused ? "yellow" : "white"} dimColor={!isAnchorFocused}>
                   {lessonsInPeriod.length}x
                 </Text>
               </Box>
@@ -272,7 +396,10 @@ function GridRow({
                 <LessonCell
                   key={`lesson-${dayIdx}-${periodIdx}-${index}`}
                   entry={entry}
+                  stripeColor={getSubjectColor(entry.lesson.subject, colorMap)}
+                  isFocused={isRangeFocused}
                   compact={compact}
+                  contentWidth={contentWidth}
                 />
               ))
             )}
@@ -286,6 +413,7 @@ function GridRow({
 export default function Timetable({ config, onLogout }: TimetableProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
+  const [colorMap] = useState(() => new Map<string, string>());
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [data, setData] = useState<WeekTimetable | null>(null);
@@ -307,6 +435,11 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
   const termWidth = Math.max(50, stdout?.columns ?? 120);
   const termHeight = Math.max(18, stdout?.rows ?? 24);
   const compact = termWidth < 90 || termHeight < 24;
+  const timeColumnWidth = compact ? 12 : 16;
+  const dayColumnWidth = Math.max(
+    compact ? 10 : 14,
+    Math.floor((termWidth - timeColumnWidth - 2) / 5),
+  );
 
   const currentMonday = getMonday(addDays(new Date(), weekOffset * 7));
   const currentFriday = addDays(currentMonday, 4);
@@ -430,14 +563,44 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       }
 
       if (key.upArrow) {
-        setSelectedPeriodIdx((prev) => Math.max(0, prev - 1));
+        if (data) {
+          const range = getSelectedLessonRange(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            selectedLessonIdx,
+          );
+          if (range) {
+            setSelectedPeriodIdx(Math.max(0, range.startPeriodIdx - 1));
+          } else {
+            setSelectedPeriodIdx((prev) => Math.max(0, prev - 1));
+          }
+        } else {
+          setSelectedPeriodIdx((prev) => Math.max(0, prev - 1));
+        }
         setSelectedLessonIdx(0);
         return;
       }
 
       if (key.downArrow) {
         const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
-        setSelectedPeriodIdx((prev) => Math.min(maxPeriod, prev + 1));
+        if (data) {
+          const range = getSelectedLessonRange(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            selectedLessonIdx,
+          );
+          if (range) {
+            setSelectedPeriodIdx(Math.min(maxPeriod, range.endPeriodIdx + 1));
+          } else {
+            setSelectedPeriodIdx((prev) => Math.min(maxPeriod, prev + 1));
+          }
+        } else {
+          setSelectedPeriodIdx((prev) => Math.min(maxPeriod, prev + 1));
+        }
         setSelectedLessonIdx(0);
         return;
       }
@@ -512,15 +675,26 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
         currentTime >= period.startTime && currentTime <= period.endTime,
     ) ?? -1;
 
-  const selectedLesson = useMemo(() => {
+  const selectedRange = useMemo(() => {
     if (!data) return null;
-
-    const day = dayLessonIndex[selectedDayIdx];
-    const period = data.timegrid[selectedPeriodIdx];
-    if (!day || !period) return null;
-
-    return (day.get(period.startTime) ?? EMPTY_LESSONS)[selectedLessonIdx]?.lesson || null;
+    return getSelectedLessonRange(
+      data,
+      dayLessonIndex,
+      selectedDayIdx,
+      selectedPeriodIdx,
+      selectedLessonIdx,
+    );
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLessonIdx]);
+
+  const selectedLesson = selectedRange?.lesson ?? null;
+
+  const selectedRangeTime = useMemo(() => {
+    if (!data || !selectedRange) return null;
+    const start = data.timegrid[selectedRange.startPeriodIdx]?.startTime;
+    const end = data.timegrid[selectedRange.endPeriodIdx]?.endTime;
+    if (!start || !end) return null;
+    return `${start} - ${end}`;
+  }, [data, selectedRange]);
 
   const selectedLessonCount = useMemo(() => {
     if (!data) return 0;
@@ -542,6 +716,10 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
 
     return "[Arrows Nav] [Shift+<-/-> Week] [Tab Overlap] [h Help] [t Today] [r Refresh] [q Quit]";
   }, [compact]);
+
+  const dividerLine = "-".repeat(
+    Math.max(10, timeColumnWidth + dayColumnWidth * 5),
+  );
 
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight} paddingX={0}>
@@ -584,29 +762,31 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
       </Box>
 
       {data && (
-        <Box flexDirection="row">
-          <Box width={compact ? 10 : 15} paddingX={1} borderStyle="single">
-            <Text bold>Time</Text>
-          </Box>
-
-          {data.days.map((day, idx) => (
-            <Box
-              key={`header-day-${idx}`}
-              flexGrow={1}
-              flexBasis={0}
-              justifyContent="center"
-              borderStyle="single"
-              borderColor={idx === todayIdx ? "cyan" : "gray"}
-            >
-              <Text bold color={idx === todayIdx ? "cyan" : "white"}>
-                {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}{" "}
-                {day.date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })}
+        <Box flexDirection="column">
+          <Box flexDirection="row">
+            <Box width={timeColumnWidth} paddingLeft={1} paddingRight={1}>
+              <Text bold dimColor>
+                Time
               </Text>
             </Box>
-          ))}
+
+            {data.days.map((day, idx) => (
+              <Box
+                key={`header-day-${idx}`}
+                width={dayColumnWidth}
+                paddingLeft={1}
+                paddingRight={1}
+              >
+                <Text bold color={idx === todayIdx ? "cyan" : "white"}>
+                  {idx === 0 ? "" : "| "}
+                  {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+          <Box paddingX={1}>
+            <Text dimColor>{dividerLine}</Text>
+          </Box>
         </Box>
       )}
 
@@ -636,12 +816,16 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                 period={period}
                 periodIdx={actualIndex}
                 dayLessonIndex={dayLessonIndex}
+                colorMap={colorMap}
                 todayIdx={todayIdx}
                 selectedDayIdx={selectedDayIdx}
                 selectedPeriodIdx={selectedPeriodIdx}
                 selectedLessonIdx={selectedLessonIdx}
+                selectedRange={selectedRange}
                 currentPeriodIdx={currentPeriodIdx}
                 compact={compact}
+                timeColumnWidth={timeColumnWidth}
+                dayColumnWidth={dayColumnWidth}
               />
             );
           })}
@@ -665,16 +849,12 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
         </Box>
       ) : null}
 
-      <Box
-        marginTop={0}
-        paddingX={1}
-        borderStyle="round"
-        borderColor="blue"
-        flexDirection="column"
-        minHeight={4}
-      >
+      <Box marginTop={0} paddingX={1} flexDirection="column" minHeight={4}>
+        <Box paddingX={1}>
+          <Text dimColor>{dividerLine}</Text>
+        </Box>
         {selectedLesson ? (
-          <Box flexDirection="column">
+          <Box flexDirection="column" paddingX={1}>
             <Box justifyContent="space-between">
               <Text bold color="cyan">
                 {truncateText(
@@ -683,7 +863,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                 )}
               </Text>
               <Text color="yellow">
-                {selectedLesson.startTime} - {selectedLesson.endTime}
+                {selectedRangeTime || `${selectedLesson.startTime} - ${selectedLesson.endTime}`}
               </Text>
             </Box>
 
@@ -714,7 +894,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
             </Box>
           </Box>
         ) : (
-          <Box justifyContent="center" alignItems="center" flexGrow={1}>
+          <Box justifyContent="center" alignItems="center" flexGrow={1} paddingX={1}>
             <Text dimColor>Select a lesson to see details</Text>
           </Box>
         )}
