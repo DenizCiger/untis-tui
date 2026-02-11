@@ -233,12 +233,15 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
                 <Box width={1}>
                   <Text dimColor>│</Text>
                 </Box>
-                <Box width={Math.max(1, dayColumnWidth - 1)} paddingLeft={1} paddingRight={1}>
+                <Box width={Math.max(1, dayColumnWidth - 1)}>
                   <Text
                     bold
                     color={idx === todayIdx ? COLORS.brand : COLORS.neutral.white}
                   >
-                    {compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3)}
+                    {centerText(
+                      compact ? day.dayName.slice(0, 2) : day.dayName.slice(0, 3),
+                      Math.max(1, dayColumnWidth - 1),
+                    )}
                   </Text>
                 </Box>
               </Box>
