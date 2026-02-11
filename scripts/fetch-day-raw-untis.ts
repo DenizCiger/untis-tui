@@ -1,5 +1,6 @@
 import { WebUntis } from "webuntis";
 import { loadConfig } from "../src/utils/config.ts";
+import { loadPassword } from "../src/utils/secret.ts";
 
 interface CliOptions {
   targetDate: Date;
@@ -64,17 +65,22 @@ function toDateNum(date: Date): number {
 
 async function main() {
   const options = parseCliOptions(process.argv.slice(2));
-  const config = loadConfig();
+  const savedConfig = loadConfig();
 
-  if (!config) {
-    throw new Error("No config found. Login once in the app first.");
+  if (!savedConfig) {
+    throw new Error("No saved profile found. Login once in the app first.");
+  }
+
+  const password = (await loadPassword(savedConfig)) || process.env.UNTIS_PASSWORD;
+  if (!password) {
+    throw new Error("No password in secure store. Log in once with the app or set UNTIS_PASSWORD.");
   }
 
   const untis = new WebUntis(
-    config.school,
-    config.username,
-    config.password,
-    config.server,
+    savedConfig.school,
+    savedConfig.username,
+    password,
+    savedConfig.server,
     "tui-untis",
   );
 

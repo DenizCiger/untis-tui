@@ -3,12 +3,14 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { COLORS } from "./colors.ts";
-import type { Config } from "../utils/config.ts";
+import type { Config, SavedConfig } from "../utils/config.ts";
 import { testCredentials } from "../utils/untis.ts";
 
 interface LoginProps {
-  onLogin: (config: Config) => void;
-  initialConfig?: Config | null;
+  onLogin: (config: Config) => Promise<void> | void;
+  initialConfig?: SavedConfig | null;
+  error?: string;
+  secureStorageNotice?: string;
 }
 
 type Field = "school" | "username" | "password" | "server";
@@ -28,11 +30,16 @@ const FIELDS: { key: Field; label: string; placeholder: string }[] = [
   { key: "password", label: "Password", placeholder: "Your WebUntis password" },
 ];
 
-export default function Login({ onLogin, initialConfig }: LoginProps) {
+export default function Login({
+  onLogin,
+  initialConfig,
+  error: appError,
+  secureStorageNotice,
+}: LoginProps) {
   const [values, setValues] = useState<Record<Field, string>>({
     school: initialConfig?.school || "",
     username: initialConfig?.username || "",
-    password: initialConfig?.password || "",
+    password: "",
     server: initialConfig?.server || "",
   });
   const [activeField, setActiveField] = useState(0);
@@ -84,7 +91,7 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
 
     const success = await testCredentials(config);
     if (success) {
-      onLogin(config);
+      await onLogin(config);
     } else {
       setError("Login failed. Check your credentials and try again.");
       setLoading(false);
@@ -103,6 +110,10 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
         <Text dimColor>
           Enter your WebUntis credentials. Use arrows or Tab to change focus.
         </Text>
+      </Box>
+
+      <Box marginBottom={1}>
+        <Text dimColor>Password is stored securely via your OS credentials store.</Text>
       </Box>
 
       {FIELDS.map((field, index) => (
@@ -156,9 +167,15 @@ export default function Login({ onLogin, initialConfig }: LoginProps) {
         </Box>
       )}
 
-      {error && (
+      {(appError || error) && (
         <Box marginTop={1}>
-          <Text color={COLORS.error}>{error}</Text>
+          <Text color={COLORS.error}>{appError || error}</Text>
+        </Box>
+      )}
+
+      {secureStorageNotice && (
+        <Box marginTop={1}>
+          <Text color={COLORS.warning}>{secureStorageNotice}</Text>
         </Box>
       )}
 

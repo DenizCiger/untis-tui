@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -33,11 +34,18 @@ export function useTimetableData(config: Config): UseTimetableDataResult {
   const [loading, setLoading] = useState(true);
   const [isFromCache, setIsFromCache] = useState(false);
   const [error, setError] = useState("");
+  const requestIdRef = useRef(0);
+
+  const startRequest = useCallback(() => {
+    requestIdRef.current += 1;
+    return requestIdRef.current;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
+      const requestId = startRequest();
       setLoading(true);
       setError("");
       setData(null);
@@ -50,7 +58,7 @@ export function useTimetableData(config: Config): UseTimetableDataResult {
           targetDate,
         );
 
-        if (cancelled) return;
+        if (cancelled || requestId !== requestIdRef.current) return;
 
         setData(cachedData);
         setIsFromCache(fromCache);
@@ -59,14 +67,17 @@ export function useTimetableData(config: Config): UseTimetableDataResult {
         if (fromCache) {
           fetchWeekTimetable(config, targetDate)
             .then((freshData) => {
-              if (cancelled) return;
+              if (cancelled || requestId !== requestIdRef.current) return;
               setData(freshData);
               setIsFromCache(false);
             })
-            .catch(() => {});
+            .catch((err: any) => {
+              if (cancelled || requestId !== requestIdRef.current) return;
+              setError(err?.message || "Failed to refresh timetable");
+            });
         }
       } catch (err: any) {
-        if (cancelled) return;
+        if (cancelled || requestId !== requestIdRef.current) return;
         setError(err?.message || "Failed to fetch timetable");
         setLoading(false);
       }
@@ -77,22 +88,28 @@ export function useTimetableData(config: Config): UseTimetableDataResult {
     return () => {
       cancelled = true;
     };
-  }, [config, weekOffset]);
+  }, [config, startRequest, weekOffset]);
 
   const refreshCurrentWeek = useCallback(() => {
+    const requestId = startRequest();
     setLoading(true);
     setError("");
 
     fetchWeekTimetable(config, addDays(new Date(), weekOffset * 7))
       .then((freshData) => {
+        if (requestId !== requestIdRef.current) return;
         setData(freshData);
         setIsFromCache(false);
       })
       .catch((err: any) => {
+        if (requestId !== requestIdRef.current) return;
         setError(err?.message || "Refresh failed");
       })
-      .finally(() => setLoading(false));
-  }, [config, weekOffset]);
+      .finally(() => {
+        if (requestId !== requestIdRef.current) return;
+        setLoading(false);
+      });
+  }, [config, startRequest, weekOffset]);
 
   const currentMonday = useMemo(
     () => getMonday(addDays(new Date(), weekOffset * 7)),

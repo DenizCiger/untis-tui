@@ -1,4 +1,5 @@
-import { loadConfig } from "../src/utils/config.ts";
+import { loadConfig, type Config } from "../src/utils/config.ts";
+import { loadPassword } from "../src/utils/secret.ts";
 import {
   fetchWeekTimetable,
   getMonday,
@@ -92,11 +93,18 @@ function formatLocalDate(date: Date): string {
 
 async function main() {
   const options = parseCliOptions(process.argv.slice(2));
-  const config = loadConfig();
+  const savedConfig = loadConfig();
 
-  if (!config) {
-    throw new Error("No config found. Login once in the app first.");
+  if (!savedConfig) {
+    throw new Error("No saved profile found. Login once in the app first.");
   }
+
+  const password = (await loadPassword(savedConfig)) || process.env.UNTIS_PASSWORD;
+  if (!password) {
+    throw new Error("No password in secure store. Log in once with the app or set UNTIS_PASSWORD.");
+  }
+
+  const config: Config = { ...savedConfig, password };
 
   const weekData = await fetchWeekTimetable(config, options.targetDate);
   const monday = getMonday(options.targetDate);

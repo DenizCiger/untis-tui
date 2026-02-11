@@ -1,4 +1,5 @@
-import { loadConfig } from "../src/utils/config.ts";
+import { loadConfig, type Config } from "../src/utils/config.ts";
+import { loadPassword } from "../src/utils/secret.ts";
 import {
   addDays,
   fetchWeekTimetable,
@@ -18,11 +19,21 @@ function intersects(lesson: ParsedLesson, period: TimeUnit): boolean {
 }
 
 async function main() {
-  const config = loadConfig();
-  if (!config) {
-    console.error("No config found. Please login once with the app first.");
+  const savedConfig = loadConfig();
+  if (!savedConfig) {
+    console.error("No saved profile found. Please login once with the app first.");
     process.exit(1);
   }
+
+  const password = (await loadPassword(savedConfig)) || process.env.UNTIS_PASSWORD;
+  if (!password) {
+    console.error(
+      "No password in secure store. Log in once with the app or set UNTIS_PASSWORD.",
+    );
+    process.exit(1);
+  }
+
+  const config: Config = { ...savedConfig, password };
 
   const monday = getMonday(new Date());
   const wednesday = addDays(monday, 2);

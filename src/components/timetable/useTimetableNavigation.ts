@@ -52,6 +52,16 @@ export function useTimetableNavigation({
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
+    const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
+    setSelectedPeriodIdx((prev) => Math.min(prev, maxPeriod));
+  }, [data]);
+
+  useEffect(() => {
+    const maxScroll = Math.max((data?.timegrid.length ?? 0) - rowsPerPage, 0);
+    setScrollOffset((prev) => Math.min(prev, maxScroll));
+  }, [data, rowsPerPage]);
+
+  useEffect(() => {
     if (selectedPeriodIdx < scrollOffset) {
       setScrollOffset(selectedPeriodIdx);
     } else if (selectedPeriodIdx >= scrollOffset + rowsPerPage) {
