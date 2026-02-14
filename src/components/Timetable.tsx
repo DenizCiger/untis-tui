@@ -20,9 +20,10 @@ import { useTimetableNavigation } from "./timetable/useTimetableNavigation.ts";
 interface TimetableProps {
   config: Config;
   onLogout: () => void;
+  topInset?: number;
 }
 
-export default function Timetable({ config, onLogout }: TimetableProps) {
+export default function Timetable({ config, onLogout, topInset = 0 }: TimetableProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [colorMap] = useState(() => new Map<string, string>());
@@ -42,7 +43,7 @@ export default function Timetable({ config, onLogout }: TimetableProps) {
   const [now, setNow] = useState(new Date());
 
   const termWidth = Math.max(50, stdout?.columns ?? 120);
-  const termHeight = Math.max(18, stdout?.rows ?? 24);
+  const termHeight = Math.max(18, (stdout?.rows ?? 24) - topInset);
   const compact = termWidth < 90 || termHeight < 24;
   const timeColumnWidth = compact ? 12 : 16;
   const dayColumnWidth = Math.max(

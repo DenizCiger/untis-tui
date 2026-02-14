@@ -22,6 +22,19 @@ export interface ParsedLesson {
   remarks: string;
 }
 
+export interface ParsedAbsence {
+  id: number;
+  studentName: string;
+  reason: string;
+  text: string;
+  excuseStatus: string;
+  isExcused: boolean;
+  startDate: Date;
+  endDate: Date;
+  startTime: string;
+  endTime: string;
+}
+
 export interface TimeUnit {
   name: string;
   startTime: string;
@@ -305,5 +318,51 @@ export async function testCredentials(config: Config): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function fetchAbsencesForRange(
+  config: Config,
+  rangeStart: Date,
+  rangeEnd: Date,
+): Promise<ParsedAbsence[]> {
+  const untis = new WebUntis(
+    config.school,
+    config.username,
+    config.password,
+    config.server,
+    "tui-untis",
+  );
+
+  await untis.login();
+
+  try {
+    const result = await untis.getAbsentLesson(rangeStart, rangeEnd);
+    const absences = result.absences ?? [];
+
+    return absences
+      .map((absence) => ({
+        id: absence.id,
+        studentName: absence.studentName || config.username,
+        reason: absence.reason || "",
+        text: absence.text || "",
+        excuseStatus: absence.excuseStatus || "",
+        isExcused: absence.isExcused,
+        startDate: parseUntisDate(absence.startDate),
+        endDate: parseUntisDate(absence.endDate),
+        startTime: formatUntisTime(absence.startTime),
+        endTime: formatUntisTime(absence.endTime),
+      }))
+      .sort((left, right) => {
+        const byStartDate = right.startDate.getTime() - left.startDate.getTime();
+        if (byStartDate !== 0) return byStartDate;
+
+        const byStartTime = right.startTime.localeCompare(left.startTime);
+        if (byStartTime !== 0) return byStartTime;
+
+        return right.id - left.id;
+      });
+  } finally {
+    await untis.logout();
   }
 }

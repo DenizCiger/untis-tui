@@ -10,9 +10,9 @@ import {
   savePassword,
 } from "../utils/secret.ts";
 import Login from "./Login.tsx";
-import Timetable from "./Timetable.tsx";
+import MainShell from "./MainShell.tsx";
 
-type Screen = "loading" | "login" | "timetable";
+type Screen = "loading" | "login" | "app";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("loading");
@@ -46,7 +46,7 @@ export default function App() {
 
       if (password) {
         setConfig({ ...saved, password });
-        setScreen("timetable");
+        setScreen("app");
       } else {
         setScreen("login");
       }
@@ -81,7 +81,7 @@ export default function App() {
     }
 
     setConfig(newConfig);
-    setScreen("timetable");
+    setScreen("app");
   };
 
   const handleLogout = () => {
@@ -125,8 +125,8 @@ export default function App() {
     );
   }
 
-  if (screen === "timetable" && config) {
-    return <Timetable config={config} onLogout={handleLogout} />;
+  if (screen === "app" && config) {
+    return <MainShell config={config} onLogout={handleLogout} />;
   }
 
   return null;
