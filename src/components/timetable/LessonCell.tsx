@@ -33,7 +33,9 @@ const LessonCell = memo(function LessonCell({
   const isSubstitutionLike =
     lesson.substitution ||
     cellState === "SUBSTITUTION" ||
-    cellState === "ADDITIONAL";
+    cellState === "ADDITIONAL" ||
+    cellState === "ROOMSUBSTITUTION" ||
+    cellState === "ROOMSUBSTITION";
   const isExam = cellState === "EXAM";
   const isCancelled = lesson.cancelled || cellState === "CANCELLED";
 

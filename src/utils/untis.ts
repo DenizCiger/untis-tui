@@ -81,6 +81,7 @@ function parseTimetableEntry(
   dateNum: number,
 ): ParsedLesson {
   const entryAny = entry as any;
+  const isFlags = (entry.is ?? {}) as Record<string, boolean | undefined>;
   const subject = entry.subjects?.[0]?.element?.name || "Unknown";
   const subjectLongName = entry.subjects?.[0]?.element?.longName || subject;
   
@@ -126,7 +127,11 @@ function parseTimetableEntry(
     startTime: formatUntisTime(entry.startTime),
     endTime: formatUntisTime(entry.endTime),
     cancelled: (entry.is?.standard === false && entry.cellState === "SUBSTITUTION") || entry.lessonCode === "cancelled",
-    substitution: entry.is?.substitution === true,
+    substitution:
+      isFlags.substitution === true ||
+      isFlags.roomSubstitution === true ||
+      isFlags.roomSubstition === true ||
+      isFlags.roomsubstition === true,
     remarks: entryAny.info || entryAny.substitutionText || "",
   };
 }

@@ -94,6 +94,8 @@ export function getCellStateChipColors(cellState: string) {
       return COLORS.cellStateChip.confirmed;
     case "SUBSTITUTION":
     case "ADDITIONAL":
+    case "ROOMSUBSTITUTION":
+    case "ROOMSUBSTITION":
       return COLORS.cellStateChip.substitution;
     case "CANCELLED":
       return COLORS.cellStateChip.cancelled;
