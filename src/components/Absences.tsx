@@ -5,6 +5,8 @@ import TextInput from "ink-text-input";
 import type { Config } from "../utils/config.ts";
 import { formatDate, type ParsedAbsence } from "../utils/untis.ts";
 import { COLORS } from "./colors.ts";
+import { useInputCapture } from "./inputCapture.tsx";
+import { isShortcutPressed } from "./shortcuts.ts";
 import { fitText, truncateText } from "./timetable/text.ts";
 import { useAbsencesData } from "./absences/useAbsencesData.ts";
 
@@ -12,6 +14,7 @@ interface AbsencesProps {
   config: Config;
   onLogout: () => void;
   topInset?: number;
+  inputEnabled?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -47,11 +50,15 @@ function getWindowDays(value: WindowFilter): number | null {
 }
 
 function getWindowLabel(value: WindowFilter): string {
-  return WINDOW_OPTIONS.find((option) => option.value === value)?.label ?? "All time";
+  return (
+    WINDOW_OPTIONS.find((option) => option.value === value)?.label ?? "All time"
+  );
 }
 
 function getStatusLabel(value: StatusFilter): string {
-  return STATUS_OPTIONS.find((option) => option.value === value)?.label ?? "All";
+  return (
+    STATUS_OPTIONS.find((option) => option.value === value)?.label ?? "All"
+  );
 }
 
 function getStatusMeta(absence: ParsedAbsence): {
@@ -81,7 +88,8 @@ function getStatusMeta(absence: ParsedAbsence): {
 }
 
 function formatAbsenceRange(absence: ParsedAbsence): string {
-  const sameDay = absence.startDate.toDateString() === absence.endDate.toDateString();
+  const sameDay =
+    absence.startDate.toDateString() === absence.endDate.toDateString();
   if (sameDay) {
     return `${formatDate(absence.startDate)} ${absence.startTime}-${absence.endTime}`;
   }
@@ -94,7 +102,8 @@ function formatAbsenceRangeCompact(absence: ParsedAbsence): string {
   const month = (absence.startDate.getMonth() + 1).toString().padStart(2, "0");
   const endDay = absence.endDate.getDate().toString().padStart(2, "0");
   const endMonth = (absence.endDate.getMonth() + 1).toString().padStart(2, "0");
-  const sameDay = absence.startDate.toDateString() === absence.endDate.toDateString();
+  const sameDay =
+    absence.startDate.toDateString() === absence.endDate.toDateString();
 
   if (sameDay) {
     return `${day}.${month}`;
@@ -107,26 +116,23 @@ function toSingleLine(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function FilterChip({
-  hotkey,
-  label,
-  active,
-}: {
-  hotkey: string;
-  label: string;
-  active: boolean;
-}) {
+function FilterChip({ label, active }: { label: string; active: boolean }) {
   return (
     <Text
       color={active ? COLORS.neutral.white : COLORS.neutral.gray}
       backgroundColor={active ? CHIP_ACTIVE_BACKGROUND : undefined}
     >
-      {` ${hotkey} ${label} `}
+      {` ${label} `}
     </Text>
   );
 }
 
-export default function Absences({ config, onLogout, topInset = 0 }: AbsencesProps) {
+export default function Absences({
+  config,
+  onLogout,
+  topInset = 0,
+  inputEnabled = true,
+}: AbsencesProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
 
@@ -148,6 +154,8 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
   const [searchQuery, setSearchQuery] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [searchMode, setSearchMode] = useState(false);
+
+  useInputCapture(searchMode);
 
   const termWidth = Math.max(70, stdout?.columns ?? 120);
   const termHeight = Math.max(20, (stdout?.rows ?? 24) - topInset);
@@ -190,8 +198,12 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
   }, [absences, cutoffDate, normalizedSearch, statusFilter]);
 
   const selectedAbsence = filteredAbsences[selectedIdx] ?? null;
-  const selectedStatusMeta = selectedAbsence ? getStatusMeta(selectedAbsence) : null;
-  const filteredExcusedCount = filteredAbsences.filter((absence) => absence.isExcused).length;
+  const selectedStatusMeta = selectedAbsence
+    ? getStatusMeta(selectedAbsence)
+    : null;
+  const filteredExcusedCount = filteredAbsences.filter(
+    (absence) => absence.isExcused,
+  ).length;
   const filteredUnexcusedCount = filteredAbsences.length - filteredExcusedCount;
   const newestLoaded = absences[0] ? formatDate(absences[0].startDate) : "-";
   const oldestLoaded = absences[absences.length - 1]
@@ -225,7 +237,7 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
   useInput(
     (input, key) => {
       if (searchMode) {
-        if (key.escape) {
+        if (isShortcutPressed("absences-search-cancel", input, key)) {
           setSearchDraft(searchQuery);
           setSearchMode(false);
         }
@@ -233,30 +245,30 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         return;
       }
 
-      if (input === "q") {
+      if (isShortcutPressed("quit", input, key)) {
         exit();
         return;
       }
 
-      if (input === "l") {
+      if (isShortcutPressed("logout", input, key)) {
         onLogout();
         return;
       }
 
-      if (input === "r") {
+      if (isShortcutPressed("absences-refresh", input, key)) {
         setSelectedIdx(0);
         refresh();
         return;
       }
 
-      if (input === "m") {
+      if (isShortcutPressed("absences-load-more", input, key)) {
         if (hasMore && !loadingInitial && !loadingMore) {
           loadMore();
         }
         return;
       }
 
-      if (input === "f") {
+      if (isShortcutPressed("absences-status", input, key)) {
         setStatusFilter((current) =>
           nextValue(
             STATUS_OPTIONS.map((option) => option.value),
@@ -267,7 +279,7 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         return;
       }
 
-      if (input === "w") {
+      if (isShortcutPressed("absences-window", input, key)) {
         setWindowFilter((current) =>
           nextValue(
             WINDOW_OPTIONS.map((option) => option.value),
@@ -278,7 +290,7 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         return;
       }
 
-      if (input === "c") {
+      if (isShortcutPressed("absences-clear", input, key)) {
         setStatusFilter("all");
         setWindowFilter("all");
         setSearchQuery("");
@@ -287,18 +299,18 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         return;
       }
 
-      if (input === "/") {
+      if (isShortcutPressed("absences-search", input, key)) {
         setSearchDraft(searchQuery);
         setSearchMode(true);
         return;
       }
 
-      if (key.upArrow || input === "k") {
+      if (isShortcutPressed("absences-up", input, key)) {
         setSelectedIdx((previous) => Math.max(0, previous - 1));
         return;
       }
 
-      if (key.downArrow || input === "j") {
+      if (isShortcutPressed("absences-down", input, key)) {
         setSelectedIdx((previous) => {
           const maxIndex = Math.max(filteredAbsences.length - 1, 0);
           const next = Math.min(maxIndex, previous + 1);
@@ -314,12 +326,12 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
 
       const pageJump = Math.max(4, Math.floor((termHeight - 11) / 2));
 
-      if (key.pageUp) {
+      if (isShortcutPressed("absences-page-up", input, key)) {
         setSelectedIdx((previous) => Math.max(0, previous - pageJump));
         return;
       }
 
-      if (key.pageDown) {
+      if (isShortcutPressed("absences-page-down", input, key)) {
         setSelectedIdx((previous) => {
           const maxIndex = Math.max(filteredAbsences.length - 1, 0);
           const next = Math.min(maxIndex, previous + pageJump);
@@ -333,12 +345,12 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         return;
       }
 
-      if (key.home) {
+      if (isShortcutPressed("absences-home", input, key)) {
         setSelectedIdx(0);
         return;
       }
 
-      if (key.end) {
+      if (isShortcutPressed("absences-end", input, key)) {
         setSelectedIdx(Math.max(filteredAbsences.length - 1, 0));
 
         if (hasMore && !loadingInitial && !loadingMore) {
@@ -346,20 +358,27 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         }
       }
     },
-    { isActive: Boolean(process.stdin.isTTY) },
+    { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
   );
 
-  const footerRows = termWidth >= 115 ? 1 : 2;
+  const footerRows = 0;
   const headerRows = searchMode ? 5 : 4;
   const syncRows = error && absences.length > 0 ? 1 : 0;
-  const bodyHeight = Math.max(8, termHeight - headerRows - footerRows - syncRows);
+  const bodyHeight = Math.max(
+    8,
+    termHeight - headerRows - footerRows - syncRows,
+  );
 
-  const listPaneWidth = splitPane ? Math.max(56, Math.floor(termWidth * 0.6)) : termWidth;
+  const listPaneWidth = splitPane
+    ? Math.max(56, Math.floor(termWidth * 0.6))
+    : termWidth;
   const detailPaneWidth = splitPane
     ? Math.max(28, termWidth - listPaneWidth - 1)
     : termWidth;
 
-  const stackedListHeight = splitPane ? bodyHeight : Math.max(7, Math.floor(bodyHeight * 0.56));
+  const stackedListHeight = splitPane
+    ? bodyHeight
+    : Math.max(7, Math.floor(bodyHeight * 0.56));
   const stackedDetailHeight = splitPane
     ? bodyHeight
     : Math.max(5, bodyHeight - stackedListHeight - 1);
@@ -373,7 +392,10 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
     Math.max(0, selectedIdx - Math.floor(listRows / 2)),
     Math.max(0, filteredAbsences.length - listRows),
   );
-  const visibleAbsences = filteredAbsences.slice(visibleStart, visibleStart + listRows);
+  const visibleAbsences = filteredAbsences.slice(
+    visibleStart,
+    visibleStart + listRows,
+  );
 
   const rowContentWidth = Math.max(30, listPaneWidth - 4);
   const statusChipCompact = rowContentWidth < 56;
@@ -393,18 +415,15 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
       ? `Showing ${absences.length}`
       : `Showing ${filteredAbsences.length} of ${absences.length}`;
 
-  const primaryControls =
-    "[Up/Down j/k] Move [PgUp/PgDn] Jump [Home/End] [f] Status [w] Window [/] Search";
-  const secondaryControls =
-    "[m] Load older [c] Clear filters [r] Refresh [l] Logout [q] Quit";
-
   return (
-    <Box flexDirection="column" width={termWidth} height={termHeight} paddingX={1}>
+    <Box flexDirection="column" width={termWidth} height={termHeight}>
       <Box justifyContent="space-between">
         <Text bold color={COLORS.brand}>
           Absence Timeline
         </Text>
-        <Text dimColor>{truncateText(`${config.username}@${config.school}`, 40)}</Text>
+        <Text dimColor>
+          {truncateText(`${config.username}@${config.school}`, 40)}
+        </Text>
       </Box>
 
       <Box justifyContent="space-between">
@@ -422,24 +441,21 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
         ) : (
           <>
             <FilterChip
-              hotkey="f"
               label={`Status: ${getStatusLabel(statusFilter)}`}
               active={statusFilter !== "all"}
             />
             <Text> </Text>
             <FilterChip
-              hotkey="w"
               label={`Window: ${getWindowLabel(windowFilter)}`}
               active={windowFilter !== "all"}
             />
             <Text> </Text>
             <FilterChip
-              hotkey="/"
               label={`Search: ${truncateText(searchQuery || "none", 18)}`}
               active={Boolean(searchQuery)}
             />
             <Text> </Text>
-            <FilterChip hotkey="c" label="Clear" active={false} />
+            <FilterChip label="Clear" active={false} />
           </>
         )}
       </Box>
@@ -459,18 +475,21 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
               placeholder="reason, note, date, status"
               focus
             />
-            <Text dimColor> (enter apply, esc cancel)</Text>
           </>
         ) : (
           <Text dimColor>
             {hasMore
-              ? "Auto-load triggers near bottom. Press m to fetch older records now."
+              ? "Auto-load triggers near bottom. Use manual load if needed."
               : "Reached oldest available records in loaded history."}
           </Text>
         )}
       </Box>
 
-      <Box flexDirection={splitPane ? "row" : "column"} height={bodyHeight} marginTop={1}>
+      <Box
+        flexDirection={splitPane ? "row" : "column"}
+        height={bodyHeight}
+        marginTop={1}
+      >
         <Box
           flexDirection="column"
           width={listPaneWidth}
@@ -478,7 +497,12 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
           borderStyle="single"
           borderColor={COLORS.neutral.brightBlack}
         >
-          <Box justifyContent="space-between" paddingX={1} height={1} flexShrink={0}>
+          <Box
+            justifyContent="space-between"
+            paddingX={1}
+            height={1}
+            flexShrink={0}
+          >
             <Text bold>History</Text>
             <Text dimColor>
               {filteredAbsences.length > 0
@@ -494,32 +518,69 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
               </Text>
             </Box>
           ) : error && absences.length === 0 ? (
-            <Box justifyContent="center" flexGrow={1} alignItems="center" paddingX={1}>
-              <Text color={COLORS.error}>{truncateText(`Error: ${error}`, Math.max(12, rowContentWidth))}</Text>
+            <Box
+              justifyContent="center"
+              flexGrow={1}
+              alignItems="center"
+              paddingX={1}
+            >
+              <Text color={COLORS.error}>
+                {truncateText(`Error: ${error}`, Math.max(12, rowContentWidth))}
+              </Text>
             </Box>
           ) : filteredAbsences.length === 0 ? (
-            <Box justifyContent="center" flexGrow={1} alignItems="center" paddingX={1}>
-              <Text color={COLORS.warning}>No absences match current filters.</Text>
+            <Box
+              justifyContent="center"
+              flexGrow={1}
+              alignItems="center"
+              paddingX={1}
+            >
+              <Text color={COLORS.warning}>
+                No absences match current filters.
+              </Text>
             </Box>
           ) : (
-            <Box flexDirection="column" paddingX={1} flexGrow={0} flexShrink={0}>
+            <Box
+              flexDirection="column"
+              paddingX={1}
+              flexGrow={0}
+              flexShrink={0}
+            >
               <Box height={1}>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {"  "}
                 </Text>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {fitText("When", dateColWidth)}
                 </Text>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {" "}
                 </Text>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {fitText("Notes", noteColWidth)}
                 </Text>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {" "}
                 </Text>
-                <Text color={COLORS.neutral.gray} backgroundColor={HISTORY_LABEL_BACKGROUND}>
+                <Text
+                  color={COLORS.neutral.gray}
+                  backgroundColor={HISTORY_LABEL_BACKGROUND}
+                >
                   {fitText("State", statusChipWidth)}
                 </Text>
               </Box>
@@ -545,7 +606,9 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
                 return (
                   <Box key={absence.id} height={1}>
                     <Text
-                      color={isSelected ? COLORS.brand : COLORS.neutral.brightBlack}
+                      color={
+                        isSelected ? COLORS.brand : COLORS.neutral.brightBlack
+                      }
                       backgroundColor={rowBackgroundColor}
                       bold={isSelected}
                     >
@@ -553,31 +616,27 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
                     </Text>
 
                     <Text
-                      color={isSelected ? COLORS.neutral.white : COLORS.neutral.gray}
+                      color={
+                        isSelected ? COLORS.neutral.white : COLORS.neutral.gray
+                      }
                       backgroundColor={rowBackgroundColor}
                     >
                       {fitText(range, dateColWidth)}
                     </Text>
 
-                    <Text
-                      backgroundColor={rowBackgroundColor}
-                    >
-                      {" "}
-                    </Text>
+                    <Text backgroundColor={rowBackgroundColor}> </Text>
 
                     <Text
-                      color={isSelected ? COLORS.neutral.white : COLORS.neutral.white}
+                      color={
+                        isSelected ? COLORS.neutral.white : COLORS.neutral.white
+                      }
                       backgroundColor={rowBackgroundColor}
                       bold={isSelected}
                     >
                       {fitText(reason, noteColWidth)}
                     </Text>
 
-                    <Text
-                      backgroundColor={rowBackgroundColor}
-                    >
-                      {" "}
-                    </Text>
+                    <Text backgroundColor={rowBackgroundColor}> </Text>
 
                     <Text
                       color={status.chipTextColor}
@@ -591,11 +650,19 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
               })}
 
               {loadingMore && (
-                <Box height={1}><Text dimColor>{fitText("Loading older records...", rowContentWidth)}</Text></Box>
+                <Box height={1}>
+                  <Text dimColor>
+                    {fitText("Loading older records...", rowContentWidth)}
+                  </Text>
+                </Box>
               )}
 
               {!loadingMore && hasMore && (
-                <Box height={1}><Text dimColor>{fitText("More records available (m)", rowContentWidth)}</Text></Box>
+                <Box height={1}>
+                  <Text dimColor>
+                    {fitText("More records available", rowContentWidth)}
+                  </Text>
+                </Box>
               )}
             </Box>
           )}
@@ -603,7 +670,11 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
 
         {splitPane ? <Box width={1} /> : <Box height={1} />}
 
-        <Box flexDirection="column" width={detailPaneWidth} height={rightPaneHeight}>
+        <Box
+          flexDirection="column"
+          width={detailPaneWidth}
+          height={rightPaneHeight}
+        >
           <Box
             flexDirection="column"
             height={summaryPaneHeight}
@@ -616,7 +687,9 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
             </Box>
             <Box flexDirection="column" paddingX={1}>
               <Text>{`${filteredExcusedCount} excused | ${filteredUnexcusedCount} unexcused`}</Text>
-              <Text dimColor>{`Loaded range: ${newestLoaded} -> ${oldestLoaded}`}</Text>
+              <Text
+                dimColor
+              >{`Loaded range: ${newestLoaded} -> ${oldestLoaded}`}</Text>
             </Box>
           </Box>
 
@@ -645,21 +718,31 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
               {selectedAbsence ? (
                 <>
                   <Text dimColor>When</Text>
-                  <Text>{toSingleLine(formatAbsenceRange(selectedAbsence))}</Text>
+                  <Text>
+                    {toSingleLine(formatAbsenceRange(selectedAbsence))}
+                  </Text>
 
                   <Text dimColor>Reason</Text>
-                  <Text>{toSingleLine(selectedAbsence.reason || "No reason")}</Text>
+                  <Text>
+                    {toSingleLine(selectedAbsence.reason || "No reason")}
+                  </Text>
 
                   <Text dimColor>Excuse status</Text>
                   <Text>
                     {toSingleLine(
                       selectedAbsence.excuseStatus ||
-                        (selectedAbsence.isExcused ? "Marked as excused" : "Not excused"),
+                        (selectedAbsence.isExcused
+                          ? "Marked as excused"
+                          : "Not excused"),
                     )}
                   </Text>
 
                   <Text dimColor>Notes</Text>
-                  <Text>{toSingleLine(selectedAbsence.text || "No additional notes")}</Text>
+                  <Text>
+                    {toSingleLine(
+                      selectedAbsence.text || "No additional notes",
+                    )}
+                  </Text>
                 </>
               ) : (
                 <Text dimColor>Select a record from the history list.</Text>
@@ -670,19 +753,10 @@ export default function Absences({ config, onLogout, topInset = 0 }: AbsencesPro
       </Box>
 
       {error && absences.length > 0 && (
-        <Text color={COLORS.error}>{truncateText(`Sync issue: ${error}`, Math.max(16, termWidth - 2))}</Text>
+        <Text color={COLORS.error}>
+          {truncateText(`Sync issue: ${error}`, Math.max(16, termWidth - 2))}
+        </Text>
       )}
-
-      <Box justifyContent="center" marginTop={1} flexDirection="column">
-        {termWidth >= 115 ? (
-          <Text dimColor>{truncateText(`${primaryControls} ${secondaryControls}`, Math.max(20, termWidth - 2))}</Text>
-        ) : (
-          <>
-            <Text dimColor>{truncateText(primaryControls, Math.max(20, termWidth - 2))}</Text>
-            <Text dimColor>{truncateText(secondaryControls, Math.max(20, termWidth - 2))}</Text>
-          </>
-        )}
-      </Box>
     </Box>
   );
 }

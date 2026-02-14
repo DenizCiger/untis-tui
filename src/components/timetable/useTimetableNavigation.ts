@@ -6,6 +6,7 @@ import {
 } from "react";
 import { useInput } from "ink";
 import type { WeekTimetable } from "../../utils/untis.ts";
+import { isShortcutPressed } from "../shortcuts.ts";
 import {
   type DayLessonIndex,
   type DayOverlayIndex,
@@ -21,6 +22,7 @@ interface UseTimetableNavigationParams {
   onQuit: () => void;
   onLogout: () => void;
   onRefresh: () => void;
+  inputEnabled: boolean;
 }
 
 interface UseTimetableNavigationResult {
@@ -28,7 +30,6 @@ interface UseTimetableNavigationResult {
   selectedPeriodIdx: number;
   selectedLessonIdx: number;
   scrollOffset: number;
-  showHelp: boolean;
   setSelectedPeriodIdx: Dispatch<SetStateAction<number>>;
 }
 
@@ -41,6 +42,7 @@ export function useTimetableNavigation({
   onQuit,
   onLogout,
   onRefresh,
+  inputEnabled,
 }: UseTimetableNavigationParams): UseTimetableNavigationResult {
   const [selectedDayIdx, setSelectedDayIdx] = useState(() => {
     const day = new Date().getDay();
@@ -49,7 +51,6 @@ export function useTimetableNavigation({
   const [selectedPeriodIdx, setSelectedPeriodIdx] = useState(0);
   const [selectedLessonIdx, setSelectedLessonIdx] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
@@ -87,39 +88,39 @@ export function useTimetableNavigation({
 
   useInput(
     (input, key) => {
-      if (input === "q") {
+      if (isShortcutPressed("quit", input, key)) {
         onQuit();
         return;
       }
 
-      if (input === "l") {
+      if (isShortcutPressed("logout", input, key)) {
         onLogout();
         return;
       }
 
-      if (key.leftArrow && key.shift) {
+      if (isShortcutPressed("timetable-week-prev", input, key)) {
         setWeekOffset((prev) => prev - 1);
         setSelectedPeriodIdx(0);
         return;
       }
 
-      if (key.rightArrow && key.shift) {
+      if (isShortcutPressed("timetable-week-next", input, key)) {
         setWeekOffset((prev) => prev + 1);
         setSelectedPeriodIdx(0);
         return;
       }
 
-      if (key.leftArrow) {
+      if (isShortcutPressed("timetable-day-prev", input, key)) {
         setSelectedDayIdx((prev) => Math.max(0, prev - 1));
         return;
       }
 
-      if (key.rightArrow) {
+      if (isShortcutPressed("timetable-day-next", input, key)) {
         setSelectedDayIdx((prev) => Math.min(4, prev + 1));
         return;
       }
 
-      if (key.upArrow) {
+      if (isShortcutPressed("timetable-up", input, key)) {
         const nextPeriodIdx = Math.max(0, selectedPeriodIdx - 1);
         setSelectedPeriodIdx(nextPeriodIdx);
         setSelectedLessonIdx(
@@ -136,7 +137,7 @@ export function useTimetableNavigation({
         return;
       }
 
-      if (key.downArrow) {
+      if (isShortcutPressed("timetable-down", input, key)) {
         const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
         const nextPeriodIdx = Math.min(maxPeriod, selectedPeriodIdx + 1);
         setSelectedPeriodIdx(nextPeriodIdx);
@@ -154,7 +155,7 @@ export function useTimetableNavigation({
         return;
       }
 
-      if (key.tab) {
+      if (isShortcutPressed("timetable-cycle-overlap", input, key)) {
         const day = dayLessonIndex[selectedDayIdx];
         const period = data?.timegrid[selectedPeriodIdx];
         if (!day || !period) return;
@@ -166,12 +167,7 @@ export function useTimetableNavigation({
         return;
       }
 
-      if (input === "h") {
-        setShowHelp((prev) => !prev);
-        return;
-      }
-
-      if (input === "t") {
+      if (isShortcutPressed("timetable-today", input, key)) {
         setWeekOffset(0);
         setSelectedLessonIdx(0);
 
@@ -187,11 +183,11 @@ export function useTimetableNavigation({
         return;
       }
 
-      if (input === "r") {
+      if (isShortcutPressed("timetable-refresh", input, key)) {
         onRefresh();
       }
     },
-    { isActive: Boolean(process.stdin.isTTY) },
+    { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
   );
 
   return {
@@ -199,7 +195,6 @@ export function useTimetableNavigation({
     selectedPeriodIdx,
     selectedLessonIdx,
     scrollOffset,
-    showHelp,
     setSelectedPeriodIdx,
   };
 }

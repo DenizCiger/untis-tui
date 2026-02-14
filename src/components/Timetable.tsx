@@ -5,7 +5,6 @@ import { COLORS } from "./colors.ts";
 import type { Config } from "../utils/config.ts";
 import GridRow from "./timetable/GridRow.tsx";
 import TimetableDetails from "./timetable/TimetableDetails.tsx";
-import TimetableFooter from "./timetable/TimetableFooter.tsx";
 import TimetableHeader from "./timetable/TimetableHeader.tsx";
 import {
   buildOverlayIndex,
@@ -21,9 +20,15 @@ interface TimetableProps {
   config: Config;
   onLogout: () => void;
   topInset?: number;
+  inputEnabled?: boolean;
 }
 
-export default function Timetable({ config, onLogout, topInset = 0 }: TimetableProps) {
+export default function Timetable({
+  config,
+  onLogout,
+  topInset = 0,
+  inputEnabled = true,
+}: TimetableProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [colorMap] = useState(() => new Map<string, string>());
@@ -74,7 +79,6 @@ export default function Timetable({ config, onLogout, topInset = 0 }: TimetableP
     selectedPeriodIdx,
     selectedLessonIdx,
     scrollOffset,
-    showHelp,
     setSelectedPeriodIdx,
   } = useTimetableNavigation({
     data,
@@ -85,6 +89,7 @@ export default function Timetable({ config, onLogout, topInset = 0 }: TimetableP
     onQuit: exit,
     onLogout,
     onRefresh: refreshCurrentWeek,
+    inputEnabled,
   });
 
   const visiblePeriods = useMemo(() => {
@@ -195,14 +200,6 @@ export default function Timetable({ config, onLogout, topInset = 0 }: TimetableP
   const selectedDayName = data?.days[selectedDayIdx]?.dayName ?? "-";
   const selectedPeriodName = data?.timegrid[selectedPeriodIdx]?.name ?? "-";
 
-  const footerText = useMemo(() => {
-    if (compact) {
-      return "[←↑↓→] [Shift+←/→] [Tab] [h] [t] [r] [q]";
-    }
-
-    return "[←↑↓→ Navigate] [Shift+←/→ Week] [Tab Overlap] [h Help] [t Today] [r Refresh] [q Quit]";
-  }, [compact]);
-
   const dividerLine = "─".repeat(Math.max(10, timeColumnWidth + dayColumnWidth * 5));
   const headerDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┼");
   const bottomDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┴");
@@ -262,7 +259,7 @@ export default function Timetable({ config, onLogout, topInset = 0 }: TimetableP
         </Box>
       ) : error ? (
         <Box justifyContent="center">
-          <Text color={COLORS.error}>Error: {error} (press r to retry)</Text>
+          <Text color={COLORS.error}>Error: {error}</Text>
         </Box>
       ) : data ? (
         <Box flexDirection="column">
@@ -365,8 +362,6 @@ export default function Timetable({ config, onLogout, topInset = 0 }: TimetableP
         overlappingLessons={overlappingLessons}
         termWidth={termWidth}
       />
-
-      <TimetableFooter showHelp={showHelp} footerText={footerText} />
     </Box>
   );
 }
