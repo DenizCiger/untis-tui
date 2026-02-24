@@ -2,6 +2,9 @@
   "name": "tui-untis",
   "module": "index.tsx",
   "type": "module",
+  "bin": {
+    "untis": "./bin/untis.js"
+  },
   "private": true,
   "scripts": {
     "start": "bun run index.tsx"
