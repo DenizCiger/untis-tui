@@ -11,6 +11,7 @@ interface TimetableDetailsProps {
   selectedLessonCount: number;
   overlappingLessons: ParsedLesson[];
   termWidth: number;
+  maxRows: number;
 }
 
 export default function TimetableDetails({
@@ -20,6 +21,7 @@ export default function TimetableDetails({
   selectedLessonCount,
   overlappingLessons,
   termWidth,
+  maxRows,
 }: TimetableDetailsProps) {
   const siblingLabel = truncateText(
     overlappingLessons
@@ -36,6 +38,13 @@ export default function TimetableDetails({
     Math.max(10, termWidth - 11),
   );
 
+  const roomLabel = truncateText(
+    selectedLesson?.roomLongName
+      ? `${selectedLesson.room} (${selectedLesson.roomLongName})`
+      : selectedLesson?.room || "N/A",
+    Math.max(10, Math.floor(termWidth * 0.45)),
+  );
+
   const teachersLabel = truncateText(
     selectedLesson?.allTeachers.join(", ") || selectedLesson?.teacher || "N/A",
     Math.max(10, termWidth - 12),
@@ -45,111 +54,122 @@ export default function TimetableDetails({
   const chipReservedWidth = cellStateLabel ? cellStateLabel.length + 6 : 0;
   const cellStateChipColors = getCellStateChipColors(cellStateLabel);
 
+  const footerMessage = selectedLesson?.remarks
+    ? {
+        text: `ℹ ${truncateText(selectedLesson.remarks, Math.max(10, termWidth - 8))}`,
+        color: COLORS.info,
+        bold: false,
+        italic: true,
+        dimColor: false,
+      }
+    : selectedLesson?.cancelled
+      ? {
+          text: "CANCELLED",
+          color: COLORS.error,
+          bold: true,
+          italic: false,
+          dimColor: false,
+        }
+      : overlappingLessons.length > 0
+        ? {
+            text: `Also: ${siblingLabel}`,
+            color: undefined,
+            bold: false,
+            italic: false,
+            dimColor: true,
+          }
+        : null;
+
+  const maxContentRows = Math.max(0, maxRows - 1);
+
   return (
-    <Box marginTop={0} paddingX={0} flexDirection="column" minHeight={4}>
+    <Box marginTop={0} paddingX={0} flexDirection="column">
       <Box>
         <Text dimColor>{bottomDividerLine}</Text>
       </Box>
-      {selectedLesson ? (
-        <Box flexDirection="column" paddingX={1}>
-          <Box justifyContent="space-between">
-            <Box flexDirection="row">
-              <Text bold color={COLORS.brand}>
-                {truncateText(
-                  `${selectedLesson.subjectLongName} (${selectedLesson.subject})`,
-                  Math.max(10, termWidth - 24 - chipReservedWidth),
-                )}
-              </Text>
-              {cellStateLabel ? (
-                <Box flexDirection="row" marginLeft={1}>
-                  <Text
-                    backgroundColor={cellStateChipColors.backgroundColor}
-                    color={cellStateChipColors.color}
-                    bold
-                  >
-                    {` ${cellStateLabel} `}
+      {maxContentRows > 0
+        ? selectedLesson
+          ? [
+              <Box key="subject" justifyContent="space-between" paddingX={1}>
+                <Box flexDirection="row">
+                  <Text bold color={COLORS.brand}>
+                    {truncateText(
+                      `${selectedLesson.subjectLongName} (${selectedLesson.subject})`,
+                      Math.max(10, termWidth - 24 - chipReservedWidth),
+                    )}
                   </Text>
+                  {cellStateLabel ? (
+                    <Box flexDirection="row" marginLeft={1}>
+                      <Text
+                        backgroundColor={cellStateChipColors.backgroundColor}
+                        color={cellStateChipColors.color}
+                        bold
+                      >
+                        {` ${cellStateLabel} `}
+                      </Text>
+                    </Box>
+                  ) : null}
                 </Box>
-              ) : null}
-            </Box>
-            <Text color={COLORS.warning}>
-              {selectedLesson.startTime} - {selectedLesson.endTime}
-            </Text>
-          </Box>
-
-          {selectedLessonCount > 1 && (
-            <Box>
-              <Text color={COLORS.warning} dimColor>
-                Overlap {selectedLessonPosition}/{selectedLessonCount}
-              </Text>
-            </Box>
-          )}
-
-          <Box>
-            <Text dimColor>
-              {" "}
-              Teacher{selectedLesson.allTeachers.length > 1 ? "s" : ""} ·{" "}
-            </Text>
-            <Text>{teachersLabel}</Text>
-          </Box>
-
-          <Box>
-            <Text dimColor> Room · </Text>
-            <Text>
-              {truncateText(
-                selectedLesson.roomLongName
-                  ? `${selectedLesson.room} (${selectedLesson.roomLongName})`
-                  : selectedLesson.room || "N/A",
-                40,
-              )}
-            </Text>
-          </Box>
-
-          <Box>
-            <Text dimColor>Classes · </Text>
-            <Text>{classesLabel}</Text>
-          </Box>
-
-          {selectedLesson.lessonText && (
-            <Box>
-              <Text dimColor>Lesson text · </Text>
-              <Text>
-                {truncateText(
-                  selectedLesson.lessonText,
-                  Math.max(10, termWidth - 16),
-                )}
-              </Text>
-            </Box>
-          )}
-
-          <Box height={2}>
-            {selectedLesson.remarks ? (
-              <Text color={COLORS.info} italic>
-                ℹ{" "}
-                {truncateText(
-                  selectedLesson.remarks,
-                  Math.max(10, termWidth - 8),
-                )}
-              </Text>
-            ) : selectedLesson.cancelled ? (
-              <Text color={COLORS.error} bold>
-                CANCELLED
-              </Text>
-            ) : overlappingLessons.length > 0 ? (
-              <Text dimColor>Also: {siblingLabel}</Text>
-            ) : null}
-          </Box>
-        </Box>
-      ) : (
-        <Box
-          justifyContent="center"
-          alignItems="center"
-          flexGrow={1}
-          paddingX={1}
-        >
-          <Text dimColor>Select a lesson to see details</Text>
-        </Box>
-      )}
+                <Text color={COLORS.warning}>
+                  {selectedLesson.startTime} - {selectedLesson.endTime}
+                </Text>
+              </Box>,
+              <Box key="teacher" paddingX={1}>
+                <Text dimColor>
+                  {" "}
+                  Teacher{selectedLesson.allTeachers.length > 1 ? "s" : ""} ·{" "}
+                </Text>
+                <Text>{teachersLabel}</Text>
+              </Box>,
+              <Box key="room" paddingX={1}>
+                <Text dimColor>Room · </Text>
+                <Text>{roomLabel}</Text>
+                <Text dimColor>  Classes · </Text>
+                <Text>{classesLabel}</Text>
+              </Box>,
+              ...(selectedLessonCount > 1
+                ? [
+                    <Box key="overlap" paddingX={1}>
+                      <Text color={COLORS.warning} dimColor>
+                        Overlap {selectedLessonPosition}/{selectedLessonCount}
+                      </Text>
+                    </Box>,
+                  ]
+                : []),
+              ...(selectedLesson.lessonText
+                ? [
+                    <Box key="lesson-text" paddingX={1}>
+                      <Text dimColor>Lesson text · </Text>
+                      <Text>
+                        {truncateText(
+                          selectedLesson.lessonText,
+                          Math.max(10, termWidth - 16),
+                        )}
+                      </Text>
+                    </Box>,
+                  ]
+                : []),
+              ...(footerMessage
+                ? [
+                    <Box key="footer" paddingX={1}>
+                      <Text
+                        color={footerMessage.color}
+                        bold={footerMessage.bold}
+                        italic={footerMessage.italic}
+                        dimColor={footerMessage.dimColor}
+                      >
+                        {footerMessage.text}
+                      </Text>
+                    </Box>,
+                  ]
+                : []),
+            ].slice(0, maxContentRows)
+          : [
+              <Box key="empty" paddingX={1}>
+                <Text dimColor>Select a lesson to see details</Text>
+              </Box>,
+            ]
+        : null}
     </Box>
   );
 }

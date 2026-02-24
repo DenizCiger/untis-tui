@@ -38,6 +38,28 @@ describe("shortcut registry", () => {
     ).toBe(false);
   });
 
+  it("uses lesson-jump bindings for timetable vertical nav", () => {
+    expect(isShortcutPressed("timetable-up", "", key({ upArrow: true }))).toBe(true);
+    expect(
+      isShortcutPressed("timetable-up", "", key({ upArrow: true, shift: true })),
+    ).toBe(false);
+
+    expect(
+      isShortcutPressed("timetable-up-step", "", key({ upArrow: true, shift: true })),
+    ).toBe(true);
+  });
+
+  it("supports timetable paging and edge shortcuts", () => {
+    expect(isShortcutPressed("timetable-page-down", "", key({ pageDown: true }))).toBe(
+      true,
+    );
+    expect(isShortcutPressed("timetable-page-up", "", key({ pageUp: true }))).toBe(
+      true,
+    );
+    expect(isShortcutPressed("timetable-home", "", key({ home: true }))).toBe(true);
+    expect(isShortcutPressed("timetable-end", "", key({ end: true }))).toBe(true);
+  });
+
   it("includes contextual sections by active tab", () => {
     const timetableSections = getShortcutSections("timetable");
     const absencesSections = getShortcutSections("absences");

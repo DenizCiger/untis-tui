@@ -121,7 +121,14 @@ export function useTimetableNavigation({
       }
 
       if (isShortcutPressed("timetable-up", input, key)) {
-        const nextPeriodIdx = Math.max(0, selectedPeriodIdx - 1);
+        const nextPeriodIdx =
+          findNextLessonPeriodIndex(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            -1,
+          ) ?? Math.max(0, selectedPeriodIdx - 1);
         setSelectedPeriodIdx(nextPeriodIdx);
         setSelectedLessonIdx(
           getSelectionIndexForPeriodChange(
@@ -139,7 +146,147 @@ export function useTimetableNavigation({
 
       if (isShortcutPressed("timetable-down", input, key)) {
         const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
+        const nextPeriodIdx =
+          findNextLessonPeriodIndex(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            1,
+          ) ?? Math.min(maxPeriod, selectedPeriodIdx + 1);
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-up-step", input, key)) {
+        const nextPeriodIdx = Math.max(0, selectedPeriodIdx - 1);
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-down-step", input, key)) {
+        const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
         const nextPeriodIdx = Math.min(maxPeriod, selectedPeriodIdx + 1);
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-page-up", input, key)) {
+        const targetPeriodIdx = Math.max(0, selectedPeriodIdx - Math.max(1, rowsPerPage - 1));
+        const nextPeriodIdx =
+          findNextLessonPeriodIndex(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            targetPeriodIdx + 1,
+            -1,
+          ) ?? targetPeriodIdx;
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-page-down", input, key)) {
+        const maxPeriod = Math.max((data?.timegrid.length ?? 1) - 1, 0);
+        const targetPeriodIdx = Math.min(
+          maxPeriod,
+          selectedPeriodIdx + Math.max(1, rowsPerPage - 1),
+        );
+        const nextPeriodIdx =
+          findNextLessonPeriodIndex(
+            data,
+            dayLessonIndex,
+            selectedDayIdx,
+            targetPeriodIdx - 1,
+            1,
+          ) ?? targetPeriodIdx;
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-home", input, key)) {
+        const nextPeriodIdx = findEdgeLessonPeriodIndex(
+          data,
+          dayLessonIndex,
+          selectedDayIdx,
+          "start",
+        );
+        setSelectedPeriodIdx(nextPeriodIdx);
+        setSelectedLessonIdx(
+          getSelectionIndexForPeriodChange(
+            data,
+            dayLessonIndex,
+            overlayIndexByDay,
+            selectedDayIdx,
+            selectedPeriodIdx,
+            nextPeriodIdx,
+            selectedLessonIdx,
+          ),
+        );
+        return;
+      }
+
+      if (isShortcutPressed("timetable-end", input, key)) {
+        const nextPeriodIdx = findEdgeLessonPeriodIndex(
+          data,
+          dayLessonIndex,
+          selectedDayIdx,
+          "end",
+        );
         setSelectedPeriodIdx(nextPeriodIdx);
         setSelectedLessonIdx(
           getSelectionIndexForPeriodChange(
@@ -197,6 +344,68 @@ export function useTimetableNavigation({
     scrollOffset,
     setSelectedPeriodIdx,
   };
+}
+
+function hasLessonsAtPeriod(
+  data: WeekTimetable | null,
+  dayLessonIndex: DayLessonIndex[],
+  dayIdx: number,
+  periodIdx: number,
+): boolean {
+  if (!data) return false;
+  const day = dayLessonIndex[dayIdx];
+  const period = data.timegrid[periodIdx];
+  if (!day || !period) return false;
+  return (day.get(period.startTime) ?? EMPTY_LESSONS).length > 0;
+}
+
+function findNextLessonPeriodIndex(
+  data: WeekTimetable | null,
+  dayLessonIndex: DayLessonIndex[],
+  dayIdx: number,
+  fromPeriodIdx: number,
+  direction: -1 | 1,
+): number | null {
+  if (!data) return null;
+
+  const maxPeriod = data.timegrid.length - 1;
+  let periodIdx = fromPeriodIdx + direction;
+  while (periodIdx >= 0 && periodIdx <= maxPeriod) {
+    if (hasLessonsAtPeriod(data, dayLessonIndex, dayIdx, periodIdx)) {
+      return periodIdx;
+    }
+
+    periodIdx += direction;
+  }
+
+  return null;
+}
+
+function findEdgeLessonPeriodIndex(
+  data: WeekTimetable | null,
+  dayLessonIndex: DayLessonIndex[],
+  dayIdx: number,
+  edge: "start" | "end",
+): number {
+  if (!data || data.timegrid.length === 0) return 0;
+
+  if (edge === "start") {
+    for (let periodIdx = 0; periodIdx < data.timegrid.length; periodIdx += 1) {
+      if (hasLessonsAtPeriod(data, dayLessonIndex, dayIdx, periodIdx)) {
+        return periodIdx;
+      }
+    }
+
+    return 0;
+  }
+
+  for (let periodIdx = data.timegrid.length - 1; periodIdx >= 0; periodIdx -= 1) {
+    if (hasLessonsAtPeriod(data, dayLessonIndex, dayIdx, periodIdx)) {
+      return periodIdx;
+    }
+  }
+
+  return data.timegrid.length - 1;
 }
 
 function getSelectionIndexForPeriodChange(

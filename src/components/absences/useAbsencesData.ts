@@ -9,6 +9,8 @@ import {
 const CHUNK_DAYS = 45;
 const MAX_HISTORY_DAYS = 365 * 5;
 const MAX_EMPTY_CHUNK_STREAK = 4;
+const LOAD_MORE_BURST_CHUNKS = 3;
+const LOAD_MORE_BURST_MIN_RECORDS = 12;
 
 interface UseAbsencesDataResult {
   absences: ParsedAbsence[];
@@ -90,8 +92,8 @@ export function useAbsencesData(config: Config): UseAbsencesDataResult {
 
       inFlightRef.current = true;
       const generation = generationRef.current;
-      const chunkIndex = chunkIndexRef.current;
-      const { rangeStart, rangeEnd } = getChunkRange(baseDateRef.current, chunkIndex);
+      const chunksPerRun = isInitial ? 1 : LOAD_MORE_BURST_CHUNKS;
+      const collected: ParsedAbsence[] = [];
 
       if (isInitial) {
         setLoadingInitial(true);
@@ -102,30 +104,46 @@ export function useAbsencesData(config: Config): UseAbsencesDataResult {
       setError("");
 
       try {
-        const nextChunk = await fetchAbsencesForRange(config, rangeStart, rangeEnd);
+        for (let step = 0; step < chunksPerRun && hasMoreRef.current; step += 1) {
+          const chunkIndex = chunkIndexRef.current;
+          const { rangeStart, rangeEnd } = getChunkRange(baseDateRef.current, chunkIndex);
+          const nextChunk = await fetchAbsencesForRange(config, rangeStart, rangeEnd);
 
-        if (generation !== generationRef.current) {
-          return;
+          if (generation !== generationRef.current) {
+            return;
+          }
+
+          chunkIndexRef.current += 1;
+
+          if (nextChunk.length === 0) {
+            emptyChunkStreakRef.current += 1;
+          } else {
+            emptyChunkStreakRef.current = 0;
+            collected.push(...nextChunk);
+          }
+
+          const reachedMaxHistory =
+            chunkIndexRef.current * CHUNK_DAYS >= MAX_HISTORY_DAYS;
+          const reachedEmptyStreak =
+            emptyChunkStreakRef.current >= MAX_EMPTY_CHUNK_STREAK;
+          const nextHasMore = !reachedMaxHistory && !reachedEmptyStreak;
+
+          hasMoreRef.current = nextHasMore;
+          setHasMore(nextHasMore);
+          setDaysLoaded(chunkIndexRef.current * CHUNK_DAYS);
+
+          if (isInitial) {
+            break;
+          }
+
+          if (collected.length >= LOAD_MORE_BURST_MIN_RECORDS) {
+            break;
+          }
         }
 
-        chunkIndexRef.current += 1;
-        setDaysLoaded(chunkIndexRef.current * CHUNK_DAYS);
-
-        if (nextChunk.length === 0) {
-          emptyChunkStreakRef.current += 1;
-        } else {
-          emptyChunkStreakRef.current = 0;
+        if (collected.length > 0) {
+          setAbsences((previous) => mergeAbsences(previous, collected));
         }
-
-        setAbsences((previous) => mergeAbsences(previous, nextChunk));
-
-        const reachedMaxHistory = chunkIndexRef.current * CHUNK_DAYS >= MAX_HISTORY_DAYS;
-        const reachedEmptyStreak =
-          emptyChunkStreakRef.current >= MAX_EMPTY_CHUNK_STREAK;
-        const nextHasMore = !reachedMaxHistory && !reachedEmptyStreak;
-
-        hasMoreRef.current = nextHasMore;
-        setHasMore(nextHasMore);
       } catch (err: any) {
         if (generation !== generationRef.current) {
           return;

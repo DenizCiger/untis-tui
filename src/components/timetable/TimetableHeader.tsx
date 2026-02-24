@@ -34,19 +34,17 @@ export default function TimetableHeader({
         </Text>
 
         <Box>
+          {isFromCache && !loading && (
+            <Text color={COLORS.warning} dimColor>
+              (cached){" "}
+            </Text>
+          )}
           {!compact && (
             <Text dimColor>
               {truncateText(
                 `${config.username}@${config.school}`,
                 Math.max(10, termWidth - 22),
               )}
-            </Text>
-          )}
-
-          {isFromCache && !loading && (
-            <Text color={COLORS.warning} dimColor>
-              {" "}
-              (cached)
             </Text>
           )}
         </Box>

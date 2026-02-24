@@ -161,6 +161,8 @@ export default function Absences({
   const termHeight = Math.max(20, (stdout?.rows ?? 24) - topInset);
   const splitPane = termWidth >= 118;
   const compactHeader = termWidth < 96;
+  const pageJump = Math.max(4, Math.floor((termHeight - 11) / 2));
+  const prefetchThreshold = Math.max(6, pageJump);
 
   const cutoffDate = useMemo(() => {
     const days = getWindowDays(windowFilter);
@@ -173,6 +175,8 @@ export default function Absences({
   }, [windowFilter]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  const maintainPrefetchBuffer =
+    statusFilter === "all" && windowFilter === "all" && normalizedSearch.length === 0;
 
   const filteredAbsences = useMemo(() => {
     return absences.filter((absence) => {
@@ -219,9 +223,8 @@ export default function Absences({
 
   useEffect(() => {
     if (loadingInitial || loadingMore || !hasMore) return;
-    if (filteredAbsences.length <= 1) return;
 
-    const nearBottom = selectedIdx >= filteredAbsences.length - 2;
+    const nearBottom = selectedIdx >= filteredAbsences.length - 1 - prefetchThreshold;
     if (nearBottom) {
       loadMore();
     }
@@ -231,6 +234,26 @@ export default function Absences({
     loadMore,
     loadingInitial,
     loadingMore,
+    prefetchThreshold,
+    selectedIdx,
+  ]);
+
+  useEffect(() => {
+    if (!maintainPrefetchBuffer || loadingInitial || loadingMore || !hasMore) return;
+
+    const targetBufferedRows = selectedIdx + pageJump + prefetchThreshold;
+    if (filteredAbsences.length <= targetBufferedRows) {
+      loadMore();
+    }
+  }, [
+    filteredAbsences.length,
+    hasMore,
+    loadMore,
+    loadingInitial,
+    loadingMore,
+    maintainPrefetchBuffer,
+    pageJump,
+    prefetchThreshold,
     selectedIdx,
   ]);
 
@@ -315,7 +338,12 @@ export default function Absences({
           const maxIndex = Math.max(filteredAbsences.length - 1, 0);
           const next = Math.min(maxIndex, previous + 1);
 
-          if (next >= maxIndex && hasMore && !loadingInitial && !loadingMore) {
+          if (
+            next >= Math.max(0, maxIndex - prefetchThreshold) &&
+            hasMore &&
+            !loadingInitial &&
+            !loadingMore
+          ) {
             loadMore();
           }
 
@@ -323,8 +351,6 @@ export default function Absences({
         });
         return;
       }
-
-      const pageJump = Math.max(4, Math.floor((termHeight - 11) / 2));
 
       if (isShortcutPressed("absences-page-up", input, key)) {
         setSelectedIdx((previous) => Math.max(0, previous - pageJump));
@@ -336,7 +362,12 @@ export default function Absences({
           const maxIndex = Math.max(filteredAbsences.length - 1, 0);
           const next = Math.min(maxIndex, previous + pageJump);
 
-          if (next >= maxIndex && hasMore && !loadingInitial && !loadingMore) {
+          if (
+            next >= Math.max(0, maxIndex - prefetchThreshold) &&
+            hasMore &&
+            !loadingInitial &&
+            !loadingMore
+          ) {
             loadMore();
           }
 
@@ -360,6 +391,14 @@ export default function Absences({
     },
     { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
   );
+
+  const historyLoadLabel = loadingInitial
+    ? "Initial sync in progress"
+    : loadingMore
+      ? "Loading older records"
+      : hasMore
+        ? `Ready to load more (+${chunkDays}d)`
+        : "History fully loaded";
 
   const footerRows = 0;
   const headerRows = searchMode ? 5 : 4;
@@ -429,7 +468,7 @@ export default function Absences({
       <Box justifyContent="space-between">
         <Text dimColor>{`Newest first | ${listSummary}`}</Text>
         <Text dimColor>
-          {`${daysLoaded} days loaded${hasMore ? ` | +${chunkDays}d chunks` : " | fully loaded"}`}
+          {`${daysLoaded} days loaded | ${historyLoadLabel}`}
         </Text>
       </Box>
 
@@ -478,9 +517,13 @@ export default function Absences({
           </>
         ) : (
           <Text dimColor>
-            {hasMore
-              ? "Auto-load triggers near bottom. Use manual load if needed."
-              : "Reached oldest available records in loaded history."}
+            {loadingMore
+              ? "Loading older records now..."
+              : hasMore
+                ? maintainPrefetchBuffer
+                  ? `Auto-load keeps ~${pageJump + prefetchThreshold} rows buffered. Press m to fetch now.`
+                  : `Auto-load starts near the bottom (${prefetchThreshold} rows early). Press m to fetch now.`
+                : "Reached oldest available records in loaded history."}
           </Text>
         )}
       </Box>
@@ -651,8 +694,9 @@ export default function Absences({
 
               {loadingMore && (
                 <Box height={1}>
-                  <Text dimColor>
-                    {fitText("Loading older records...", rowContentWidth)}
+                  <Text color={COLORS.warning}>
+                    <Spinner type="dots" />{" "}
+                    {fitText("Loading older records...", Math.max(8, rowContentWidth - 2))}
                   </Text>
                 </Box>
               )}
@@ -660,8 +704,14 @@ export default function Absences({
               {!loadingMore && hasMore && (
                 <Box height={1}>
                   <Text dimColor>
-                    {fitText("More records available", rowContentWidth)}
+                    {fitText(`More records available - press m or keep scrolling`, rowContentWidth)}
                   </Text>
+                </Box>
+              )}
+
+              {!loadingMore && !hasMore && filteredAbsences.length > 0 && (
+                <Box height={1}>
+                  <Text dimColor>{fitText("End of available history", rowContentWidth)}</Text>
                 </Box>
               )}
             </Box>

@@ -23,6 +23,12 @@ interface TimetableProps {
   inputEnabled?: boolean;
 }
 
+const GRID_ROW_HEIGHT = 3;
+const TIMETABLE_HEADER_ROWS = 2;
+const DAY_HEADER_ROWS = 2;
+const MAX_SCROLL_HINT_ROWS = 2;
+const MIN_DETAILS_ROWS = 4;
+
 export default function Timetable({
   config,
   onLogout,
@@ -56,8 +62,14 @@ export default function Timetable({
     Math.floor((termWidth - timeColumnWidth - 2) / 5),
   );
 
-  const gridHeight = Math.max(5, termHeight - (compact ? 9 : 8));
-  const rowsPerPage = Math.max(1, Math.floor(gridHeight / 4));
+  const reservedRows =
+    TIMETABLE_HEADER_ROWS +
+    DAY_HEADER_ROWS +
+    MAX_SCROLL_HINT_ROWS +
+    MIN_DETAILS_ROWS;
+  // Keep a stable grid budget so dynamic details content cannot clip row bottoms.
+  const gridHeight = Math.max(GRID_ROW_HEIGHT, termHeight - reservedRows);
+  const rowsPerPage = Math.max(1, Math.floor(gridHeight / GRID_ROW_HEIGHT));
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -123,6 +135,20 @@ export default function Timetable({
       (period) =>
         currentTime >= period.startTime && currentTime <= period.endTime,
     ) ?? -1;
+
+  const topHintRows = scrollOffset > 0 ? 1 : 0;
+  const bottomHintRows =
+    data && scrollOffset + rowsPerPage < data.timegrid.length ? 1 : 0;
+
+  const detailsMaxRows = Math.max(
+    2,
+    termHeight -
+      TIMETABLE_HEADER_ROWS -
+      (data ? DAY_HEADER_ROWS : 0) -
+      topHintRows -
+      bottomHintRows -
+      visiblePeriods.length * GRID_ROW_HEIGHT,
+  );
 
   const selectedLesson = useMemo(() => {
     if (!data) return null;
@@ -196,9 +222,6 @@ export default function Timetable({
       .filter((entry) => entry.lesson.instanceId !== selectedLesson.instanceId)
       .map((entry) => entry.lesson);
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLesson]);
-
-  const selectedDayName = data?.days[selectedDayIdx]?.dayName ?? "-";
-  const selectedPeriodName = data?.timegrid[selectedPeriodIdx]?.name ?? "-";
 
   const dividerLine = "─".repeat(Math.max(10, timeColumnWidth + dayColumnWidth * 5));
   const headerDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┼");
@@ -327,30 +350,6 @@ export default function Timetable({
             </Box>
           )}
 
-          <Box flexDirection="row" height={1}>
-            <Box width={timeColumnWidth} />
-            {data.days.map((_, idx) => (
-              <Box key={`focus-row-${idx}`} width={dayColumnWidth} flexDirection="row">
-                <Box width={1}>
-                  <Text dimColor>│</Text>
-                </Box>
-                <Box width={Math.max(1, dayColumnWidth - 1)}>
-                  <Text dimColor>
-                    {idx === 2
-                      ? centerText(
-                          `Focus: ${selectedDayName} / ${selectedPeriodName}${
-                            selectedLessonCount > 1
-                              ? ` (${selectedLessonIdx + 1}/${selectedLessonCount})`
-                              : ""
-                          }`,
-                          Math.max(1, dayColumnWidth - 1),
-                        )
-                      : " ".repeat(Math.max(1, dayColumnWidth - 1))}
-                  </Text>
-                </Box>
-              </Box>
-            ))}
-          </Box>
         </Box>
       ) : null}
 
@@ -361,6 +360,7 @@ export default function Timetable({
         selectedLessonCount={selectedLessonCount}
         overlappingLessons={overlappingLessons}
         termWidth={termWidth}
+        maxRows={detailsMaxRows}
       />
     </Box>
   );
