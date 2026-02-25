@@ -32,20 +32,21 @@ interface TimetableProps {
   onLogout: () => void;
   topInset?: number;
   inputEnabled?: boolean;
+  onTargetLabelChange?: (label: string) => void;
 }
 
 const GRID_ROW_HEIGHT = 3;
-const TIMETABLE_HEADER_ROWS = 3;
+const TIMETABLE_HEADER_ROWS = 2;
 const DAY_HEADER_ROWS = 2;
 const MAX_SCROLL_HINT_ROWS = 2;
 const MIN_DETAILS_ROWS = 4;
-const SEARCH_RESULT_LIMIT = 12;
 
 export default function Timetable({
   config,
   onLogout,
   topInset = 0,
   inputEnabled = true,
+  onTargetLabelChange,
 }: TimetableProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -74,6 +75,7 @@ export default function Timetable({
   const [searchMode, setSearchMode] = useState(false);
   const [searchDraft, setSearchDraft] = useState("");
   const [searchSelectedIdx, setSearchSelectedIdx] = useState(0);
+  const [searchScrollOffset, setSearchScrollOffset] = useState(0);
 
   useInputCapture(searchMode);
 
@@ -87,23 +89,23 @@ export default function Timetable({
   );
 
   const searchResults = useMemo(
-    () => searchTimetableTargets(searchIndex, searchDraft, SEARCH_RESULT_LIMIT),
+    () => searchTimetableTargets(searchIndex, searchDraft),
     [searchIndex, searchDraft],
   );
-  const visibleSearchCount = searchMode ? Math.min(6, Math.max(searchResults.length, 1)) : 0;
-  const visibleSearchResults = useMemo(
-    () => searchResults.slice(0, Math.max(1, Math.min(visibleSearchCount, searchResults.length))),
-    [searchResults, visibleSearchCount],
-  );
-  const searchPanelRows = searchMode ? 2 + visibleSearchCount : 0;
   const targetLabel = useMemo(
     () => formatTimetableTargetLabel(activeTarget),
     [activeTarget],
   );
+  const searchModalWidth = Math.max(56, Math.min(112, termWidth - 8));
+  const searchModalHeight = Math.max(12, Math.min(30, termHeight - 4));
+  const searchResultRows = Math.max(3, searchModalHeight - 7);
+  const visibleSearchResults = useMemo(
+    () => searchResults.slice(searchScrollOffset, searchScrollOffset + searchResultRows),
+    [searchResults, searchScrollOffset, searchResultRows],
+  );
 
   const reservedRows =
     TIMETABLE_HEADER_ROWS +
-    searchPanelRows +
     DAY_HEADER_ROWS +
     MAX_SCROLL_HINT_ROWS +
     MIN_DETAILS_ROWS;
@@ -117,15 +119,37 @@ export default function Timetable({
   }, []);
 
   useEffect(() => {
+    onTargetLabelChange?.(targetLabel);
+  }, [onTargetLabelChange, targetLabel]);
+
+  useEffect(() => {
     if (!searchMode) return;
     ensureSearchIndexLoaded();
   }, [ensureSearchIndexLoaded, searchMode]);
 
   useEffect(() => {
     setSearchSelectedIdx((prev) =>
-      Math.min(prev, Math.max(visibleSearchResults.length - 1, 0)),
+      Math.min(prev, Math.max(searchResults.length - 1, 0)),
     );
-  }, [visibleSearchResults.length]);
+  }, [searchResults.length]);
+
+  useEffect(() => {
+    const maxScroll = Math.max(searchResults.length - searchResultRows, 0);
+    setSearchScrollOffset((prev) => Math.min(prev, maxScroll));
+  }, [searchResultRows, searchResults.length]);
+
+  useEffect(() => {
+    if (!searchMode) return;
+
+    if (searchSelectedIdx < searchScrollOffset) {
+      setSearchScrollOffset(searchSelectedIdx);
+      return;
+    }
+
+    if (searchSelectedIdx >= searchScrollOffset + searchResultRows) {
+      setSearchScrollOffset(searchSelectedIdx - searchResultRows + 1);
+    }
+  }, [searchMode, searchResultRows, searchScrollOffset, searchSelectedIdx]);
 
   useInput(
     (input, key) => {
@@ -137,20 +161,44 @@ export default function Timetable({
 
         if (isShortcutPressed("timetable-search-up", input, key)) {
           setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev - 1, Math.max(visibleSearchResults.length - 1, 0))),
+            Math.max(0, Math.min(prev - 1, Math.max(searchResults.length - 1, 0))),
           );
           return;
         }
 
         if (isShortcutPressed("timetable-search-down", input, key)) {
           setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev + 1, Math.max(visibleSearchResults.length - 1, 0))),
+            Math.max(0, Math.min(prev + 1, Math.max(searchResults.length - 1, 0))),
           );
           return;
         }
 
+        if (key.pageUp) {
+          setSearchSelectedIdx((prev) =>
+            Math.max(0, Math.min(prev - searchResultRows, Math.max(searchResults.length - 1, 0))),
+          );
+          return;
+        }
+
+        if (key.pageDown) {
+          setSearchSelectedIdx((prev) =>
+            Math.max(0, Math.min(prev + searchResultRows, Math.max(searchResults.length - 1, 0))),
+          );
+          return;
+        }
+
+        if (key.home) {
+          setSearchSelectedIdx(0);
+          return;
+        }
+
+        if (key.end) {
+          setSearchSelectedIdx(Math.max(searchResults.length - 1, 0));
+          return;
+        }
+
         if (isShortcutPressed("timetable-search-submit", input, key)) {
-          const selected = visibleSearchResults[searchSelectedIdx];
+          const selected = searchResults[searchSelectedIdx];
           if (!selected) {
             setSearchMode(false);
             return;
@@ -173,6 +221,7 @@ export default function Timetable({
       if (isShortcutPressed("timetable-search", input, key)) {
         setSearchDraft("");
         setSearchSelectedIdx(0);
+        setSearchScrollOffset(0);
         setSearchMode(true);
         ensureSearchIndexLoaded();
         return;
@@ -253,7 +302,6 @@ export default function Timetable({
     2,
     termHeight -
       TIMETABLE_HEADER_ROWS -
-      searchPanelRows -
       (data ? DAY_HEADER_ROWS : 0) -
       topHintRows -
       bottomHintRows -
@@ -335,6 +383,12 @@ export default function Timetable({
 
   const headerDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┼");
   const bottomDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┴");
+  const searchVisibleStart = searchResults.length > 0 ? searchScrollOffset + 1 : 0;
+  const searchVisibleEnd = Math.min(
+    searchResults.length,
+    searchScrollOffset + visibleSearchResults.length,
+  );
+
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight} paddingX={0}>
       <TimetableHeader
@@ -346,54 +400,7 @@ export default function Timetable({
         currentMonday={currentMonday}
         currentFriday={currentFriday}
         weekOffset={weekOffset}
-        targetLabel={targetLabel}
       />
-
-      {searchMode && (
-        <Box flexDirection="column">
-          <Box>
-            <Text color={COLORS.brand}>Target Search: </Text>
-            <TextInput
-              value={searchDraft}
-              onChange={(value) => {
-                setSearchDraft(value);
-                setSearchSelectedIdx(0);
-              }}
-              placeholder="class, room, teacher"
-              focus
-            />
-          </Box>
-          <Box>
-            {searchIndexLoading ? (
-              <Text color={COLORS.warning}>
-                <Spinner type="dots" /> Loading timetable targets...
-              </Text>
-            ) : searchIndexError ? (
-              <Text color={COLORS.error}>
-                {`Target load failed: ${searchIndexError}`}
-              </Text>
-            ) : visibleSearchResults.length === 0 ? (
-              <Text dimColor>No targets found for this query.</Text>
-            ) : (
-              <Text dimColor>Use ↑/↓ to choose, Enter to apply, Esc to cancel.</Text>
-            )}
-          </Box>
-          {!searchIndexLoading &&
-            !searchIndexError &&
-            visibleSearchResults.map((result, idx) => {
-              const selected = idx === searchSelectedIdx;
-              return (
-                <Box key={`${result.type}:${result.id}`}>
-                  <Text color={selected ? COLORS.brand : COLORS.neutral.gray} bold={selected}>
-                    {selected ? "> " : "  "}
-                  </Text>
-                  <Text dimColor>{`[${formatTimetableSearchTypeLabel(result.type)}] `}</Text>
-                  <Text>{`${result.name}${result.longName !== result.name ? ` (${result.longName})` : ""}`}</Text>
-                </Box>
-              );
-            })}
-        </Box>
-      )}
 
       {data && (
         <Box flexDirection="column">
@@ -517,6 +524,105 @@ export default function Timetable({
         termWidth={termWidth}
         maxRows={detailsMaxRows}
       />
+
+      {searchMode && (
+        <Box
+          position="absolute"
+          width={termWidth}
+          height={termHeight}
+          justifyContent="center"
+          alignItems="center"
+        >
+          <Box
+            flexDirection="column"
+            width={searchModalWidth}
+            height={searchModalHeight}
+            borderStyle="round"
+            borderColor={COLORS.brand}
+            backgroundColor={COLORS.neutral.black}
+            paddingX={1}
+          >
+            <Box justifyContent="space-between">
+              <Text bold color={COLORS.brand}>
+                Timetable Target Search
+              </Text>
+              <Text dimColor>
+                {searchResults.length > 0
+                  ? `${Math.min(searchSelectedIdx + 1, searchResults.length)}/${searchResults.length}`
+                  : "0/0"}
+              </Text>
+            </Box>
+
+            <Box>
+              <Text color={COLORS.brand}>{"> "}</Text>
+              <TextInput
+                value={searchDraft}
+                onChange={(value) => {
+                  setSearchDraft(value);
+                  setSearchSelectedIdx(0);
+                  setSearchScrollOffset(0);
+                }}
+                placeholder="class, room, teacher"
+                focus
+              />
+            </Box>
+
+            <Box minHeight={1}>
+              {searchIndexLoading ? (
+                <Text color={COLORS.warning}>
+                  <Spinner type="dots" /> Loading timetable targets...
+                </Text>
+              ) : searchIndexError ? (
+                <Text color={COLORS.error}>{`Target load failed: ${searchIndexError}`}</Text>
+              ) : (
+                <Text dimColor>
+                  Use ↑/↓, PgUp/PgDn, Home/End, Enter apply, Esc cancel.
+                </Text>
+              )}
+            </Box>
+
+            <Box flexDirection="column" flexGrow={1} overflow="hidden">
+              {!searchIndexLoading && !searchIndexError && searchResults.length === 0 && (
+                <Text dimColor>No targets found for this query.</Text>
+              )}
+
+              {!searchIndexLoading &&
+                !searchIndexError &&
+                visibleSearchResults.map((result, idx) => {
+                  const absoluteIdx = searchScrollOffset + idx;
+                  const selected = absoluteIdx === searchSelectedIdx;
+                  return (
+                    <Box key={`${result.type}:${result.id}`}>
+                      <Text
+                        color={selected ? COLORS.brand : COLORS.neutral.gray}
+                        bold={selected}
+                      >
+                        {selected ? "> " : "  "}
+                      </Text>
+                      <Text dimColor>{`[${formatTimetableSearchTypeLabel(result.type)}] `}</Text>
+                      <Text>
+                        {`${result.name}${result.longName !== result.name ? ` (${result.longName})` : ""}`}
+                      </Text>
+                    </Box>
+                  );
+                })}
+            </Box>
+
+            <Box justifyContent="space-between">
+              <Text dimColor>
+                {searchResults.length > 0
+                  ? `Showing ${searchVisibleStart}-${searchVisibleEnd}`
+                  : "Showing 0-0"}
+              </Text>
+              <Text dimColor>
+                {searchResults.length > searchResultRows
+                  ? `Scroll ${searchScrollOffset}/${Math.max(searchResults.length - searchResultRows, 0)}`
+                  : " "}
+              </Text>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

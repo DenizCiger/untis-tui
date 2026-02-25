@@ -340,13 +340,38 @@ async function fetchClassesForSearch(untis: WebUntis): Promise<Klasse[]> {
 }
 
 function mapTeachersToSearchItems(teachers: Teacher[]): TimetableSearchItem[] {
-  return teachers.map((teacher) => ({
-    type: "teacher",
-    id: teacher.id,
-    name: teacher.name || teacher.longName || String(teacher.id),
-    longName: teacher.longName || teacher.name || String(teacher.id),
-    searchText: buildSearchText(teacher.name, teacher.longName, teacher.foreName),
-  }));
+  return teachers.map((teacher) => {
+    const teacherShortName = teacher.name?.trim() || "";
+    const teacherSurname = teacher.longName?.trim() || "";
+    const teacherForename = teacher.foreName?.trim() || "";
+
+    const combinedFullName = `${teacherForename} ${teacherSurname}`.trim();
+    const displayName =
+      combinedFullName ||
+      teacherSurname ||
+      teacherShortName ||
+      String(teacher.id);
+    const secondaryName =
+      teacherShortName && teacherShortName !== displayName
+        ? teacherShortName
+        : teacherSurname && teacherSurname !== displayName
+          ? teacherSurname
+          : displayName;
+
+    return {
+      type: "teacher",
+      id: teacher.id,
+      name: displayName,
+      longName: secondaryName,
+      searchText: buildSearchText(
+        displayName,
+        secondaryName,
+        teacherShortName,
+        teacherSurname,
+        teacherForename,
+      ),
+    };
+  });
 }
 
 function mapRoomsToSearchItems(rooms: Room[]): TimetableSearchItem[] {

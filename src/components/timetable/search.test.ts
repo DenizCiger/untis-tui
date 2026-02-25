@@ -59,4 +59,41 @@ describe("timetable search ranking", () => {
       "teacher:2",
     ]);
   });
+
+  it("matches multi-token queries across name fields", () => {
+    const results = searchTimetableTargets(
+      [
+        item({
+          id: 1,
+          type: "teacher",
+          name: "Max Mustermann",
+          longName: "MMAX",
+          searchText: "max mustermann mmax",
+        }),
+        item({
+          id: 2,
+          type: "teacher",
+          name: "Max Muster",
+          longName: "MMUS",
+          searchText: "max muster mmus",
+        }),
+      ],
+      "max mmax",
+    );
+
+    expect(results.map((entry) => entry.id)).toEqual([1]);
+  });
+
+  it("returns all matches when no limit is provided", () => {
+    const results = searchTimetableTargets(
+      [
+        item({ id: 1, name: "AA" }),
+        item({ id: 2, name: "AB" }),
+        item({ id: 3, name: "AC" }),
+      ],
+      "a",
+    );
+
+    expect(results).toHaveLength(3);
+  });
 });

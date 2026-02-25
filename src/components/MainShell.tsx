@@ -7,6 +7,7 @@ import { InputCaptureProvider } from "./inputCapture.tsx";
 import SettingsModal from "./SettingsModal.tsx";
 import Timetable from "./Timetable.tsx";
 import { isShortcutPressed, type TabId } from "./shortcuts.ts";
+import { truncateText } from "./timetable/text.ts";
 
 interface MainShellProps {
   config: Config;
@@ -33,6 +34,7 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
   const [activeTab, setActiveTab] = useState<TabId>("timetable");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalShortcutsBlocked, setGlobalShortcutsBlocked] = useState(false);
+  const [timetableTargetLabel, setTimetableTargetLabel] = useState("My timetable");
 
   useInput(
     (input, key) => {
@@ -97,7 +99,7 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight + 2}>
       <Box justifyContent="space-between">
-        <Box>
+        <Box flexDirection="row" minWidth={20}>
           {tabs.map((tab, index) => {
             const active = tab.id === activeTab;
 
@@ -108,9 +110,18 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
             );
           })}
         </Box>
-        <Text color={COLORS.neutral.white} bold={settingsOpen}>
-          {settingsOpen ? "Settings" : ""}
-        </Text>
+        <Box flexGrow={1} justifyContent="center">
+          {activeTab === "timetable" ? (
+            <Text dimColor>
+              {truncateText(timetableTargetLabel, Math.max(12, termWidth - 34))}
+            </Text>
+          ) : null}
+        </Box>
+        <Box minWidth={8} justifyContent="flex-end">
+          <Text color={COLORS.neutral.white} bold={settingsOpen}>
+            {settingsOpen ? "Settings" : ""}
+          </Text>
+        </Box>
       </Box>
 
       <InputCaptureProvider onBlockedChange={setGlobalShortcutsBlocked}>
@@ -120,6 +131,7 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
             onLogout={onLogout}
             topInset={2}
             inputEnabled={!settingsOpen}
+            onTargetLabelChange={setTimetableTargetLabel}
           />
         ) : (
           <Absences
