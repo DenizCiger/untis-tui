@@ -129,6 +129,7 @@ interface PreparedSearchItem {
 }
 
 const preparedItemCache = new WeakMap<TimetableSearchItem, PreparedSearchItem>();
+const sortedItemsCache = new WeakMap<TimetableSearchItem[], TimetableSearchItem[]>();
 
 function buildQueryContext(query: string): QueryContext {
   const normalizedQuery = normalize(query);
@@ -137,6 +138,15 @@ function buildQueryContext(query: string): QueryContext {
     tokens: tokenize(normalizedQuery),
     compactQuery: normalizedQuery.replace(/\s+/g, ""),
   };
+}
+
+function getSortedItems(items: TimetableSearchItem[]): TimetableSearchItem[] {
+  const cached = sortedItemsCache.get(items);
+  if (cached) return cached;
+
+  const sorted = [...items].sort(compareSearchItems);
+  sortedItemsCache.set(items, sorted);
+  return sorted;
 }
 
 function getPreparedSearchItem(item: TimetableSearchItem): PreparedSearchItem {
@@ -221,8 +231,7 @@ export function searchTimetableTargets(
 ): TimetableSearchItem[] {
   const queryContext = buildQueryContext(query);
   if (!queryContext.normalizedQuery) {
-    const sorted = [...items].sort(compareSearchItems);
-    return applyLimit(sorted, limit);
+    return applyLimit(getSortedItems(items), limit);
   }
 
   const ranked = items
