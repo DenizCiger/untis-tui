@@ -12,6 +12,7 @@ function lesson(overrides: Partial<ParsedLesson> & { instanceId: string }): Pars
     teacher: overrides.teacher ?? "T",
     teacherLongName: overrides.teacherLongName ?? "Teacher",
     allTeachers: overrides.allTeachers ?? [overrides.teacher ?? "T"],
+    allTeacherLongNames: overrides.allTeacherLongNames ?? [overrides.teacherLongName ?? "Teacher"],
     room: overrides.room ?? "R1",
     roomLongName: overrides.roomLongName ?? "Room 1",
     allClasses: overrides.allClasses ?? ["4AHIF"],

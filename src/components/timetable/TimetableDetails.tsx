@@ -45,8 +45,32 @@ export default function TimetableDetails({
     Math.max(10, Math.floor(termWidth * 0.45)),
   );
 
+  const teachersText = selectedLesson
+    ? (() => {
+        const combinedTeachers = selectedLesson.allTeachers
+          .map((teacherShortName, idx) => {
+            const teacherLongName =
+              selectedLesson.allTeacherLongNames[idx] || "";
+            return teacherLongName && teacherLongName !== teacherShortName
+              ? `${teacherShortName} (${teacherLongName})`
+              : teacherShortName;
+          })
+          .filter(Boolean);
+
+        if (combinedTeachers.length > 0) {
+          return combinedTeachers.join(", ");
+        }
+
+        return selectedLesson.teacherLongName &&
+          selectedLesson.teacher &&
+          selectedLesson.teacherLongName !== selectedLesson.teacher
+          ? `${selectedLesson.teacher} (${selectedLesson.teacherLongName})`
+          : selectedLesson.teacher || selectedLesson.teacherLongName || "N/A";
+      })()
+    : "N/A";
+
   const teachersLabel = truncateText(
-    selectedLesson?.allTeachers.join(", ") || selectedLesson?.teacher || "N/A",
+    teachersText,
     Math.max(10, termWidth - 12),
   );
 
@@ -117,14 +141,15 @@ export default function TimetableDetails({
               <Box key="teacher" paddingX={1}>
                 <Text dimColor>
                   {" "}
-                  Teacher{selectedLesson.allTeachers.length > 1 ? "s" : ""} ·{" "}
+                  Teacher{selectedLesson.allTeachers.length > 1 ? "s" : ""}{" "}
+                  ·{" "}
                 </Text>
                 <Text>{teachersLabel}</Text>
               </Box>,
               <Box key="room" paddingX={1}>
                 <Text dimColor>Room · </Text>
                 <Text>{roomLabel}</Text>
-                <Text dimColor>  Classes · </Text>
+                <Text dimColor> Classes · </Text>
                 <Text>{classesLabel}</Text>
               </Box>,
               ...(selectedLessonCount > 1

@@ -12,6 +12,7 @@ export interface ParsedLesson {
   teacher: string;
   teacherLongName: string;
   allTeachers: string[];
+  allTeacherLongNames: string[];
   room: string;
   roomLongName: string;
   allClasses: string[];
@@ -160,6 +161,7 @@ function parseTimetableEntry(
   entry: WebAPITimetable,
   indexInDay: number,
   dateNum: number,
+  teacherFullNameById: Map<number, string>,
 ): ParsedLesson {
   const entryAny = entry as any;
   const isFlags = (entry.is ?? {}) as Record<string, boolean | undefined>;
@@ -169,9 +171,28 @@ function parseTimetableEntry(
   const lessonText = entryAny.lessonText || "";
 
   const teacher = entry.teachers?.[0]?.element?.name || "";
-  const teacherLongName = entry.teachers?.[0]?.element?.longName || teacher;
+  const teacherLongName =
+    (() => {
+      const firstTeacher = entry.teachers?.[0];
+      const firstTeacherId = firstTeacher?.element?.id ?? firstTeacher?.id;
+      if (typeof firstTeacherId === "number") {
+        const fromDirectory = teacherFullNameById.get(firstTeacherId);
+        if (fromDirectory) return fromDirectory;
+      }
+      return firstTeacher?.element?.longName || teacher;
+    })();
   const allTeachers = (entry.teachers ?? [])
     .map((teacherEntry) => teacherEntry.element?.name || "")
+    .filter(Boolean);
+  const allTeacherLongNames = (entry.teachers ?? [])
+    .map((teacherEntry) => {
+      const teacherId = teacherEntry.element?.id ?? teacherEntry.id;
+      if (typeof teacherId === "number") {
+        const fromDirectory = teacherFullNameById.get(teacherId);
+        if (fromDirectory) return fromDirectory;
+      }
+      return teacherEntry.element?.longName || teacherEntry.element?.name || "";
+    })
     .filter(Boolean);
 
   const room = entry.rooms?.[0]?.element?.name || "";
@@ -202,6 +223,7 @@ function parseTimetableEntry(
     teacher,
     teacherLongName,
     allTeachers,
+    allTeacherLongNames,
     room,
     roomLongName,
     allClasses,
@@ -345,7 +367,7 @@ function mapTeachersToSearchItems(teachers: Teacher[]): TimetableSearchItem[] {
     const teacherSurname = teacher.longName?.trim() || "";
     const teacherForename = teacher.foreName?.trim() || "";
 
-    const combinedFullName = `${teacherForename} ${teacherSurname}`.trim();
+    const combinedFullName = `${teacherSurname} ${teacherForename}`.trim();
     const displayName =
       combinedFullName ||
       teacherSurname ||
@@ -447,10 +469,24 @@ export async function fetchWeekTimetable(
         ? untis.getOwnTimetableForWeek(weekDate, 1)
         : untis.getTimetableForWeek(weekDate, request.id, request.type, 1);
 
-    const [raw, timegridRaw] = await Promise.all([
+    const [raw, timegridRaw, teachers] = await Promise.all([
       timetableRequest,
       untis.getTimegrid(),
+      untis.getTeachers(),
     ]);
+
+    const teacherFullNameById = new Map<number, string>();
+    for (const teacher of teachers) {
+      const teacherShortName = teacher.name?.trim() || "";
+      const teacherSurname = teacher.longName?.trim() || "";
+      const teacherForename = teacher.foreName?.trim() || "";
+      const combinedFullName = `${teacherSurname} ${teacherForename}`.trim();
+      const teacherFullName =
+        combinedFullName || teacherSurname || teacherShortName;
+      if (teacherFullName) {
+        teacherFullNameById.set(teacher.id, teacherFullName);
+      }
+    }
 
     // Parse timegrid
     // WebUntis returns timegrids per day, but usually they are the same.
@@ -487,7 +523,9 @@ export async function fetchWeekTimetable(
       days.push({
         date: dayDate,
         dayName: DAY_NAMES[dayDate.getDay()] || "Unknown",
-        lessons: entries.map((entry, idx) => parseTimetableEntry(entry, idx, dateNum)),
+        lessons: entries.map((entry, idx) =>
+          parseTimetableEntry(entry, idx, dateNum, teacherFullNameById),
+        ),
       });
     }
 

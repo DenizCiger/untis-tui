@@ -103,6 +103,9 @@ function ensureLessonInstanceId(
     lessonText: lesson.lessonText || "",
     cellState: lesson.cellState || "",
     allTeachers: lesson.allTeachers ?? (lesson.teacher ? [lesson.teacher] : []),
+    allTeacherLongNames:
+      lesson.allTeacherLongNames ??
+      (lesson.teacherLongName ? [lesson.teacherLongName] : []),
     allClasses: lesson.allClasses ?? [],
     instanceId:
       lesson.instanceId ||
