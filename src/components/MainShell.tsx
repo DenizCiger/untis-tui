@@ -35,7 +35,8 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
   const [activeTab, setActiveTab] = useState<TabId>("timetable");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [globalShortcutsBlocked, setGlobalShortcutsBlocked] = useState(false);
-  const [timetableTargetLabel, setTimetableTargetLabel] = useState("My timetable");
+  const [timetableTargetLabel, setTimetableTargetLabel] =
+    useState("My timetable");
 
   useStableInput(
     (input, key) => {
@@ -119,8 +120,12 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
           ) : null}
         </Box>
         <Box minWidth={8} justifyContent="flex-end">
-          <Text color={COLORS.neutral.white} bold={settingsOpen}>
-            {settingsOpen ? "Settings" : ""}
+          <Text
+            color={COLORS.neutral.white}
+            bold={settingsOpen}
+            dimColor={!settingsOpen}
+          >
+            {settingsOpen ? "Settings" : "Press ? for settings"}
           </Text>
         </Box>
       </Box>
