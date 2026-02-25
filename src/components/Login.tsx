@@ -10,6 +10,7 @@ import { useStableInput } from "./useStableInput.ts";
 interface LoginProps {
   onLogin: (config: Config) => Promise<void> | void;
   initialConfig?: SavedConfig | null;
+  savedLoginConfig?: Config | null;
   error?: string;
   secureStorageNotice?: string;
 }
@@ -34,6 +35,7 @@ const FIELDS: { key: Field; label: string; placeholder: string }[] = [
 export default function Login({
   onLogin,
   initialConfig,
+  savedLoginConfig,
   error: appError,
   secureStorageNotice,
 }: LoginProps) {
@@ -47,6 +49,58 @@ export default function Login({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const authenticateAndLogin = async (
+    config: Config,
+    failureMessage: string,
+  ) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const success = await testCredentials(config);
+      if (!success) {
+        setError(failureMessage);
+        setLoading(false);
+        return;
+      }
+
+      await onLogin(config);
+    } catch {
+      setError(failureMessage);
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    const config: Config = {
+      school: values.school.trim(),
+      username: values.username.trim(),
+      password: values.password,
+      server: values.server.trim(),
+    };
+
+    if (!config.server || !config.school || !config.username || !config.password) {
+      setError("All fields are required");
+      return;
+    }
+
+    await authenticateAndLogin(
+      config,
+      "Login failed. Check your credentials and try again.",
+    );
+  };
+
+  const handleSavedLogin = async () => {
+    if (!savedLoginConfig || loading) {
+      return;
+    }
+
+    await authenticateAndLogin(
+      savedLoginConfig,
+      "Saved login failed. Re-enter your credentials and try again.",
+    );
+  };
 
   useStableInput(
     (_input, key) => {
@@ -70,34 +124,13 @@ export default function Login({
       if (key.ctrl && _input === "v") {
         setShowPassword((prev) => !prev);
       }
+
+      if (key.ctrl && _input === "l" && savedLoginConfig) {
+        void handleSavedLogin();
+      }
     },
     { isActive: Boolean(process.stdin.isTTY) },
   );
-
-  const handleSubmit = async () => {
-    const config: Config = {
-      school: values.school.trim(),
-      username: values.username.trim(),
-      password: values.password,
-      server: values.server.trim(),
-    };
-
-    if (!config.server || !config.school || !config.username || !config.password) {
-      setError("All fields are required");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    const success = await testCredentials(config);
-    if (success) {
-      await onLogin(config);
-    } else {
-      setError("Login failed. Check your credentials and try again.");
-      setLoading(false);
-    }
-  };
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -116,6 +149,14 @@ export default function Login({
       <Box marginBottom={1}>
         <Text dimColor>Password is stored securely via your OS credentials store.</Text>
       </Box>
+
+      {savedLoginConfig && (
+        <Box marginBottom={1}>
+          <Text color={COLORS.brand}>
+            {`Saved account: ${savedLoginConfig.username}@${savedLoginConfig.school} (${savedLoginConfig.server}) | Press Ctrl+l to login with saved credentials`}
+          </Text>
+        </Box>
+      )}
 
       {FIELDS.map((field, index) => (
         <Box key={field.key} marginBottom={0}>
@@ -183,7 +224,9 @@ export default function Login({
       {!loading && (
         <Box marginTop={1}>
           <Text dimColor>
-            Enter next/submit | Tab move focus | Ctrl+v toggle password visibility
+            {savedLoginConfig
+              ? "Enter next/submit | Tab move focus | Ctrl+v toggle password visibility | Ctrl+l login with saved account"
+              : "Enter next/submit | Tab move focus | Ctrl+v toggle password visibility"}
           </Text>
         </Box>
       )}

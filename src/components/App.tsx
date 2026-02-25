@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import type { Config, SavedConfig } from "../utils/config.ts";
-import { loadConfig, saveConfig, clearConfig } from "../utils/config.ts";
+import { loadConfig, saveConfig } from "../utils/config.ts";
 import { clearCache } from "../utils/cache.ts";
 import {
-  clearPassword,
   getSecureStorageDiagnostic,
   loadPassword,
   savePassword,
@@ -17,6 +16,7 @@ type Screen = "loading" | "login" | "app";
 export default function App() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null);
+  const [savedPassword, setSavedPassword] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [error, setError] = useState("");
   const [secureStorageNotice, setSecureStorageNotice] = useState("");
@@ -43,6 +43,7 @@ export default function App() {
 
       const password = await loadPassword(saved);
       if (cancelled) return;
+      setSavedPassword(password);
 
       if (password) {
         setConfig({ ...saved, password });
@@ -79,6 +80,7 @@ export default function App() {
     } catch {
       setError("Login succeeded, but secure password storage failed. You will need to log in again next time.");
     }
+    setSavedPassword(newConfig.password);
 
     setConfig(newConfig);
     setScreen("app");
@@ -94,17 +96,26 @@ export default function App() {
           }
         : savedConfig;
 
-    if (activeProfile) {
-      void clearPassword(activeProfile);
+    if (config) {
+      setSavedPassword(config.password);
     }
 
-    clearConfig();
     clearCache();
-    setSavedConfig(null);
+    if (activeProfile) {
+      setSavedConfig(activeProfile);
+    }
     setError("");
     setConfig(null);
     setScreen("login");
   };
+
+  const savedLoginConfig: Config | null =
+    savedConfig && savedPassword
+      ? {
+          ...savedConfig,
+          password: savedPassword,
+        }
+      : null;
 
   if (screen === "loading") {
     return (
@@ -119,6 +130,7 @@ export default function App() {
       <Login
         onLogin={handleLogin}
         initialConfig={savedConfig}
+        savedLoginConfig={savedLoginConfig}
         error={error}
         secureStorageNotice={secureStorageNotice}
       />
