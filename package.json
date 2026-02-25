@@ -19,8 +19,8 @@
   "dependencies": {
     "ink": "^6.6.0",
     "ink-spinner": "^5.0.0",
-    "ink-text-input": "^6.0.0",
     "react": "^19.2.4",
+    "tsx": "^4.20.6",
     "webuntis": "^2.2.1"
   }
 }

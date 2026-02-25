@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, useApp, useInput, useStdout } from "ink";
+import { Box, Text, useApp, useStdout } from "ink";
 import Spinner from "ink-spinner";
-import TextInput from "ink-text-input";
 import type { Config } from "../utils/config.ts";
 import { formatDate, type ParsedAbsence } from "../utils/untis.ts";
 import { COLORS } from "./colors.ts";
+import TextInput from "./TextInput.tsx";
 import { useInputCapture } from "./inputCapture.tsx";
 import { isShortcutPressed } from "./shortcuts.ts";
 import { fitText, truncateText } from "./timetable/text.ts";
 import { useAbsencesData } from "./absences/useAbsencesData.ts";
+import { useStableInput } from "./useStableInput.ts";
 
 interface AbsencesProps {
   config: Config;
@@ -257,17 +258,8 @@ export default function Absences({
     selectedIdx,
   ]);
 
-  useInput(
+  useStableInput(
     (input, key) => {
-      if (searchMode) {
-        if (isShortcutPressed("absences-search-cancel", input, key)) {
-          setSearchDraft(searchQuery);
-          setSearchMode(false);
-        }
-
-        return;
-      }
-
       if (isShortcutPressed("quit", input, key)) {
         exit();
         return;
@@ -389,7 +381,7 @@ export default function Absences({
         }
       }
     },
-    { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
+    { isActive: inputEnabled && !searchMode && Boolean(process.stdin.isTTY) },
   );
 
   const historyLoadLabel = loadingInitial
@@ -506,6 +498,15 @@ export default function Absences({
             <TextInput
               value={searchDraft}
               onChange={setSearchDraft}
+              onKey={(input, key) => {
+                if (isShortcutPressed("absences-search-cancel", input, key)) {
+                  setSearchDraft(searchQuery);
+                  setSearchMode(false);
+                  return true;
+                }
+
+                return false;
+              }}
               onSubmit={() => {
                 setSearchQuery(searchDraft.trim());
                 setSearchMode(false);

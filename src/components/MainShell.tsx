@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Box, Text, useInput, useStdout } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { Config } from "../utils/config.ts";
 import { COLORS } from "./colors.ts";
 import Absences from "./Absences.tsx";
@@ -8,6 +8,7 @@ import SettingsModal from "./SettingsModal.tsx";
 import Timetable from "./Timetable.tsx";
 import { isShortcutPressed, type TabId } from "./shortcuts.ts";
 import { truncateText } from "./timetable/text.ts";
+import { useStableInput } from "./useStableInput.ts";
 
 interface MainShellProps {
   config: Config;
@@ -36,7 +37,7 @@ export default function MainShell({ config, onLogout }: MainShellProps) {
   const [globalShortcutsBlocked, setGlobalShortcutsBlocked] = useState(false);
   const [timetableTargetLabel, setTimetableTargetLabel] = useState("My timetable");
 
-  useInput(
+  useStableInput(
     (input, key) => {
       if (settingsOpen) {
         if (isShortcutPressed("settings-close", input, key)) {

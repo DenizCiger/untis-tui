@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, useApp, useInput, useStdout } from "ink";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Box, Text, useApp, useStdout } from "ink";
 import Spinner from "ink-spinner";
-import TextInput from "ink-text-input";
 import { COLORS } from "./colors.ts";
+import TextInput from "./TextInput.tsx";
 import type { Config } from "../utils/config.ts";
 import GridRow from "./timetable/GridRow.tsx";
 import TimetableDetails from "./timetable/TimetableDetails.tsx";
@@ -26,6 +26,7 @@ import {
 import { buildGridDivider, centerText } from "./timetable/text.ts";
 import { useTimetableData } from "./timetable/useTimetableData.ts";
 import { useTimetableNavigation } from "./timetable/useTimetableNavigation.ts";
+import { useStableInput } from "./useStableInput.ts";
 
 interface TimetableProps {
   config: Config;
@@ -76,6 +77,7 @@ export default function Timetable({
   const [searchDraft, setSearchDraft] = useState("");
   const [searchSelectedIdx, setSearchSelectedIdx] = useState(0);
   const [searchScrollOffset, setSearchScrollOffset] = useState(0);
+  const deferredSearchDraft = useDeferredValue(searchDraft);
 
   useInputCapture(searchMode);
 
@@ -89,9 +91,10 @@ export default function Timetable({
   );
 
   const searchResults = useMemo(
-    () => searchTimetableTargets(searchIndex, searchDraft),
-    [searchIndex, searchDraft],
+    () => searchTimetableTargets(searchIndex, deferredSearchDraft),
+    [deferredSearchDraft, searchIndex],
   );
+  const searchResultsAreDeferred = searchDraft !== deferredSearchDraft;
   const targetLabel = useMemo(
     () => formatTimetableTargetLabel(activeTarget),
     [activeTarget],
@@ -151,73 +154,38 @@ export default function Timetable({
     }
   }, [searchMode, searchResultRows, searchScrollOffset, searchSelectedIdx]);
 
-  useInput(
+  const applySearchSelection = () => {
+    const instantResults = searchResultsAreDeferred
+      ? searchTimetableTargets(searchIndex, searchDraft)
+      : searchResults;
+    const boundedIndex = Math.max(
+      0,
+      Math.min(searchSelectedIdx, Math.max(instantResults.length - 1, 0)),
+    );
+    const selected = instantResults[boundedIndex];
+    if (!selected) {
+      setSearchMode(false);
+      return;
+    }
+
+    const nextTarget: TimetableTarget = {
+      type: selected.type,
+      id: selected.id,
+      name: selected.name,
+      longName: selected.longName,
+    };
+    setActiveTarget(nextTarget);
+    setSearchMode(false);
+  };
+
+  const moveSearchSelection = (delta: number) => {
+    setSearchSelectedIdx((prev) =>
+      Math.max(0, Math.min(prev + delta, Math.max(searchResults.length - 1, 0))),
+    );
+  };
+
+  useStableInput(
     (input, key) => {
-      if (searchMode) {
-        if (isShortcutPressed("timetable-search-cancel", input, key)) {
-          setSearchMode(false);
-          return;
-        }
-
-        if (isShortcutPressed("timetable-search-up", input, key)) {
-          setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev - 1, Math.max(searchResults.length - 1, 0))),
-          );
-          return;
-        }
-
-        if (isShortcutPressed("timetable-search-down", input, key)) {
-          setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev + 1, Math.max(searchResults.length - 1, 0))),
-          );
-          return;
-        }
-
-        if (key.pageUp) {
-          setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev - searchResultRows, Math.max(searchResults.length - 1, 0))),
-          );
-          return;
-        }
-
-        if (key.pageDown) {
-          setSearchSelectedIdx((prev) =>
-            Math.max(0, Math.min(prev + searchResultRows, Math.max(searchResults.length - 1, 0))),
-          );
-          return;
-        }
-
-        if (key.home) {
-          setSearchSelectedIdx(0);
-          return;
-        }
-
-        if (key.end) {
-          setSearchSelectedIdx(Math.max(searchResults.length - 1, 0));
-          return;
-        }
-
-        if (isShortcutPressed("timetable-search-submit", input, key)) {
-          const selected = searchResults[searchSelectedIdx];
-          if (!selected) {
-            setSearchMode(false);
-            return;
-          }
-
-          const nextTarget: TimetableTarget = {
-            type: selected.type,
-            id: selected.id,
-            name: selected.name,
-            longName: selected.longName,
-          };
-          setActiveTarget(nextTarget);
-          setSearchMode(false);
-          return;
-        }
-
-        return;
-      }
-
       if (isShortcutPressed("timetable-search", input, key)) {
         setSearchDraft("");
         setSearchSelectedIdx(0);
@@ -231,7 +199,7 @@ export default function Timetable({
         clearActiveTarget();
       }
     },
-    { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
+    { isActive: inputEnabled && !searchMode && Boolean(process.stdin.isTTY) },
   );
 
   const dayLessonIndex = useMemo(
@@ -562,6 +530,47 @@ export default function Timetable({
                   setSearchSelectedIdx(0);
                   setSearchScrollOffset(0);
                 }}
+                onSubmit={() => {
+                  applySearchSelection();
+                }}
+                onKey={(input, key) => {
+                  if (isShortcutPressed("timetable-search-cancel", input, key)) {
+                    setSearchMode(false);
+                    return true;
+                  }
+
+                  if (isShortcutPressed("timetable-search-up", input, key)) {
+                    moveSearchSelection(-1);
+                    return true;
+                  }
+
+                  if (isShortcutPressed("timetable-search-down", input, key)) {
+                    moveSearchSelection(1);
+                    return true;
+                  }
+
+                  if (key.pageUp) {
+                    moveSearchSelection(-searchResultRows);
+                    return true;
+                  }
+
+                  if (key.pageDown) {
+                    moveSearchSelection(searchResultRows);
+                    return true;
+                  }
+
+                  if (key.home) {
+                    setSearchSelectedIdx(0);
+                    return true;
+                  }
+
+                  if (key.end) {
+                    setSearchSelectedIdx(Math.max(searchResults.length - 1, 0));
+                    return true;
+                  }
+
+                  return false;
+                }}
                 placeholder="class, room, teacher"
                 focus
               />
@@ -574,6 +583,8 @@ export default function Timetable({
                 </Text>
               ) : searchIndexError ? (
                 <Text color={COLORS.error}>{`Target load failed: ${searchIndexError}`}</Text>
+              ) : searchResultsAreDeferred ? (
+                <Text dimColor>Updating results...</Text>
               ) : (
                 <Text dimColor>
                   Use ↑/↓, PgUp/PgDn, Home/End, Enter apply, Esc cancel.

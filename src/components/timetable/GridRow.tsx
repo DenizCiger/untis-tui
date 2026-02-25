@@ -26,7 +26,7 @@ interface GridRowProps {
   dayColumnWidth: number;
 }
 
-export default function GridRow({
+function GridRow({
   period,
   periodIdx,
   dayLessonIndex,
@@ -257,3 +257,5 @@ export default function GridRow({
     </Box>
   );
 }
+
+export default React.memo(GridRow);

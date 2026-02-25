@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
+import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
 import { COLORS } from "./colors.ts";
+import TextInput from "./TextInput.tsx";
 import type { Config, SavedConfig } from "../utils/config.ts";
 import { testCredentials } from "../utils/untis.ts";
+import { useStableInput } from "./useStableInput.ts";
 
 interface LoginProps {
   onLogin: (config: Config) => Promise<void> | void;
@@ -47,7 +48,7 @@ export default function Login({
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  useInput(
+  useStableInput(
     (_input, key) => {
       if (loading) return;
 
@@ -66,7 +67,7 @@ export default function Login({
         setActiveField((prev) => Math.min(FIELDS.length - 1, prev + 1));
       }
 
-      if (_input === "v") {
+      if (key.ctrl && _input === "v") {
         setShowPassword((prev) => !prev);
       }
     },
@@ -182,7 +183,7 @@ export default function Login({
       {!loading && (
         <Box marginTop={1}>
           <Text dimColor>
-            Enter next/submit | Tab move focus | v toggle password visibility
+            Enter next/submit | Tab move focus | Ctrl+v toggle password visibility
           </Text>
         </Box>
       )}

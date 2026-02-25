@@ -4,9 +4,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useInput } from "ink";
 import type { WeekTimetable } from "../../utils/untis.ts";
 import { isShortcutPressed } from "../shortcuts.ts";
+import { useStableInput } from "../useStableInput.ts";
 import {
   type DayLessonIndex,
   type DayOverlayIndex,
@@ -86,7 +86,7 @@ export function useTimetableNavigation({
     });
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx]);
 
-  useInput(
+  useStableInput(
     (input, key) => {
       if (isShortcutPressed("quit", input, key)) {
         onQuit();

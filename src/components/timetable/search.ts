@@ -113,17 +113,57 @@ interface MatchRank {
   penalty: number;
 }
 
-function getMatchRank(item: TimetableSearchItem, query: string): MatchRank | null {
-  const normalizedQuery = normalize(query);
-  if (!normalizedQuery) return { rank: 0, penalty: 0 };
+interface QueryContext {
+  normalizedQuery: string;
+  tokens: string[];
+  compactQuery: string;
+}
 
-  const tokens = tokenize(normalizedQuery);
-  const compactQuery = normalizedQuery.replace(/\s+/g, "");
+interface PreparedSearchItem {
+  name: string;
+  longName: string;
+  searchText: string;
+  compactSearch: string;
+  nameWords: string[];
+  longNameWords: string[];
+}
+
+const preparedItemCache = new WeakMap<TimetableSearchItem, PreparedSearchItem>();
+
+function buildQueryContext(query: string): QueryContext {
+  const normalizedQuery = normalize(query);
+  return {
+    normalizedQuery,
+    tokens: tokenize(normalizedQuery),
+    compactQuery: normalizedQuery.replace(/\s+/g, ""),
+  };
+}
+
+function getPreparedSearchItem(item: TimetableSearchItem): PreparedSearchItem {
+  const cached = preparedItemCache.get(item);
+  if (cached) return cached;
 
   const name = normalize(item.name);
   const longName = normalize(item.longName);
   const searchText = normalize(item.searchText || `${item.name} ${item.longName}`);
-  const compactSearch = searchText.replace(/\s+/g, "");
+  const prepared: PreparedSearchItem = {
+    name,
+    longName,
+    searchText,
+    compactSearch: searchText.replace(/\s+/g, ""),
+    nameWords: toWords(name),
+    longNameWords: toWords(longName),
+  };
+  preparedItemCache.set(item, prepared);
+  return prepared;
+}
+
+function getMatchRank(item: PreparedSearchItem, queryContext: QueryContext): MatchRank | null {
+  const { normalizedQuery, tokens, compactQuery } = queryContext;
+  if (!normalizedQuery) return { rank: 0, penalty: 0 };
+
+  const { name, longName, searchText, compactSearch, nameWords, longNameWords } =
+    item;
 
   if (name.startsWith(normalizedQuery)) {
     return { rank: 0, penalty: name.length - normalizedQuery.length };
@@ -133,12 +173,12 @@ function getMatchRank(item: TimetableSearchItem, query: string): MatchRank | nul
     return { rank: 1, penalty: longName.length - normalizedQuery.length };
   }
 
-  const nameWordPenalty = wordPrefixPenalty(toWords(name), tokens);
+  const nameWordPenalty = wordPrefixPenalty(nameWords, tokens);
   if (nameWordPenalty !== null) {
     return { rank: 2, penalty: nameWordPenalty };
   }
 
-  const longNameWordPenalty = wordPrefixPenalty(toWords(longName), tokens);
+  const longNameWordPenalty = wordPrefixPenalty(longNameWords, tokens);
   if (longNameWordPenalty !== null) {
     return { rank: 3, penalty: longNameWordPenalty };
   }
@@ -163,13 +203,33 @@ function getMatchRank(item: TimetableSearchItem, query: string): MatchRank | nul
   return null;
 }
 
+function applyLimit(
+  items: TimetableSearchItem[],
+  limit?: number,
+): TimetableSearchItem[] {
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    return items.slice(0, Math.floor(limit));
+  }
+
+  return items;
+}
+
 export function searchTimetableTargets(
   items: TimetableSearchItem[],
   query: string,
   limit?: number,
 ): TimetableSearchItem[] {
+  const queryContext = buildQueryContext(query);
+  if (!queryContext.normalizedQuery) {
+    const sorted = [...items].sort(compareSearchItems);
+    return applyLimit(sorted, limit);
+  }
+
   const ranked = items
-    .map((item) => ({ item, score: getMatchRank(item, query) }))
+    .map((item) => ({
+      item,
+      score: getMatchRank(getPreparedSearchItem(item), queryContext),
+    }))
     .filter(
       (entry): entry is { item: TimetableSearchItem; score: MatchRank } =>
         entry.score !== null,
@@ -187,10 +247,8 @@ export function searchTimetableTargets(
     return compareSearchItems(left.item, right.item);
   });
 
-  const mapped = ranked.map((entry) => entry.item);
-  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
-    return mapped.slice(0, Math.floor(limit));
-  }
-
-  return mapped;
+  return applyLimit(
+    ranked.map((entry) => entry.item),
+    limit,
+  );
 }

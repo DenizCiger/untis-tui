@@ -16,7 +16,7 @@ interface TimetableHeaderProps {
   weekOffset: number;
 }
 
-export default function TimetableHeader({
+function TimetableHeader({
   compact,
   config,
   termWidth,
@@ -65,3 +65,5 @@ export default function TimetableHeader({
     </>
   );
 }
+
+export default React.memo(TimetableHeader);

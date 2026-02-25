@@ -14,7 +14,7 @@ interface TimetableDetailsProps {
   maxRows: number;
 }
 
-export default function TimetableDetails({
+function TimetableDetails({
   bottomDividerLine,
   selectedLesson,
   selectedLessonPosition,
@@ -198,3 +198,5 @@ export default function TimetableDetails({
     </Box>
   );
 }
+
+export default React.memo(TimetableDetails);
