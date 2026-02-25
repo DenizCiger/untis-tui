@@ -60,11 +60,25 @@ describe("shortcut registry", () => {
     expect(isShortcutPressed("timetable-end", "", key({ end: true }))).toBe(true);
   });
 
+  it("supports timetable target search and clear shortcuts", () => {
+    expect(isShortcutPressed("timetable-search", "/", key())).toBe(true);
+    expect(isShortcutPressed("timetable-target-clear", "c", key())).toBe(true);
+    expect(isShortcutPressed("timetable-search-submit", "", key({ return: true }))).toBe(
+      true,
+    );
+    expect(isShortcutPressed("timetable-search-cancel", "", key({ escape: true }))).toBe(
+      true,
+    );
+  });
+
   it("includes contextual sections by active tab", () => {
     const timetableSections = getShortcutSections("timetable");
     const absencesSections = getShortcutSections("absences");
 
     expect(timetableSections.some((section) => section.title === "Timetable")).toBe(true);
+    expect(
+      timetableSections.some((section) => section.title === "Timetable Search Input"),
+    ).toBe(true);
     expect(timetableSections.some((section) => section.title === "Absences")).toBe(false);
     expect(absencesSections.some((section) => section.title === "Absences")).toBe(true);
   });

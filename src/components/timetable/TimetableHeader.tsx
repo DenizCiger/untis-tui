@@ -14,6 +14,7 @@ interface TimetableHeaderProps {
   currentMonday: Date;
   currentFriday: Date;
   weekOffset: number;
+  targetLabel: string;
 }
 
 export default function TimetableHeader({
@@ -25,6 +26,7 @@ export default function TimetableHeader({
   currentMonday,
   currentFriday,
   weekOffset,
+  targetLabel,
 }: TimetableHeaderProps) {
   return (
     <>
@@ -61,6 +63,10 @@ export default function TimetableHeader({
             {"  • This week"}
           </Text>
         )}
+      </Box>
+
+      <Box justifyContent="center">
+        <Text dimColor>{truncateText(targetLabel, Math.max(14, termWidth - 2))}</Text>
       </Box>
     </>
   );

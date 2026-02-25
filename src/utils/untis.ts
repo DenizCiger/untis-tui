@@ -1,5 +1,5 @@
-import { WebUntis } from "webuntis";
-import type { WebAPITimetable } from "webuntis";
+import { WebUntis, WebUntisElementType } from "webuntis";
+import type { Klasse, Room, Teacher, WebAPITimetable } from "webuntis";
 import type { Config } from "./config.ts";
 import { getCachedWeek, saveWeekToCache } from "./cache.ts";
 
@@ -50,6 +50,87 @@ export interface DayTimetable {
 export interface WeekTimetable {
   days: DayTimetable[];
   timegrid: TimeUnit[];
+}
+
+export type TimetableTargetType = "own" | "class" | "room" | "teacher";
+export type TimetableSearchTargetType = Exclude<TimetableTargetType, "own">;
+
+export type TimetableTarget =
+  | { type: "own" }
+  | {
+      type: TimetableSearchTargetType;
+      id: number;
+      name: string;
+      longName: string;
+    };
+
+export interface TimetableSearchItem {
+  type: TimetableSearchTargetType;
+  id: number;
+  name: string;
+  longName: string;
+  searchText: string;
+}
+
+interface OwnTimetableRequest {
+  mode: "own";
+}
+
+interface TargetTimetableRequest {
+  mode: "target";
+  id: number;
+  type: number;
+}
+
+const TARGET_TYPE_LABEL: Record<TimetableSearchTargetType, string> = {
+  class: "Class",
+  room: "Room",
+  teacher: "Teacher",
+};
+
+export function getDefaultTimetableTarget(): TimetableTarget {
+  return { type: "own" };
+}
+
+function normalizeTimetableTarget(target?: TimetableTarget): TimetableTarget {
+  if (!target || target.type === "own") {
+    return { type: "own" };
+  }
+
+  return target;
+}
+
+export function targetToCacheKey(target?: TimetableTarget): string {
+  const normalized = normalizeTimetableTarget(target);
+  if (normalized.type === "own") return "own";
+  return `${normalized.type}:${normalized.id}`;
+}
+
+export function formatTimetableTargetLabel(target?: TimetableTarget): string {
+  const normalized = normalizeTimetableTarget(target);
+  if (normalized.type === "own") return "My timetable";
+  return `${TARGET_TYPE_LABEL[normalized.type]}: ${normalized.name}`;
+}
+
+function mapTargetTypeToWebUntisElementType(type: TimetableSearchTargetType): number {
+  if (type === "class") return WebUntisElementType.CLASS;
+  if (type === "room") return WebUntisElementType.ROOM;
+  return WebUntisElementType.TEACHER;
+}
+
+export function resolveTimetableForWeekRequest(
+  target?: TimetableTarget,
+): OwnTimetableRequest | TargetTimetableRequest {
+  const normalized = normalizeTimetableTarget(target);
+  if (normalized.type === "own") {
+    return { mode: "own" };
+  }
+
+  return {
+    mode: "target",
+    id: normalized.id,
+    type: mapTargetTypeToWebUntisElementType(normalized.type),
+  };
 }
 
 function formatUntisTime(time: number): string {
@@ -219,23 +300,130 @@ export function formatDate(date: Date): string {
   });
 }
 
-export async function fetchWeekTimetable(
+function buildSearchText(...parts: Array<string | undefined>): string {
+  return parts
+    .filter((part): part is string => Boolean(part && part.trim()))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeSearchItems(items: TimetableSearchItem[]): TimetableSearchItem[] {
+  const deduped = new Map<string, TimetableSearchItem>();
+
+  for (const item of items) {
+    const key = `${item.type}:${item.id}`;
+    if (deduped.has(key)) continue;
+    deduped.set(key, item);
+  }
+
+  return Array.from(deduped.values()).sort((left, right) => {
+    const byType = left.type.localeCompare(right.type);
+    if (byType !== 0) return byType;
+
+    const byName = left.name.localeCompare(right.name);
+    if (byName !== 0) return byName;
+
+    return left.id - right.id;
+  });
+}
+
+async function fetchClassesForSearch(untis: WebUntis): Promise<Klasse[]> {
+  try {
+    const schoolYear = await untis.getCurrentSchoolyear();
+    return await untis.getClasses(true, schoolYear.id);
+  } catch {
+    const classes = await (untis as any).getClasses(true);
+    return Array.isArray(classes) ? (classes as Klasse[]) : [];
+  }
+}
+
+function mapTeachersToSearchItems(teachers: Teacher[]): TimetableSearchItem[] {
+  return teachers.map((teacher) => ({
+    type: "teacher",
+    id: teacher.id,
+    name: teacher.name || teacher.longName || String(teacher.id),
+    longName: teacher.longName || teacher.name || String(teacher.id),
+    searchText: buildSearchText(teacher.name, teacher.longName, teacher.foreName),
+  }));
+}
+
+function mapRoomsToSearchItems(rooms: Room[]): TimetableSearchItem[] {
+  return rooms.map((room) => ({
+    type: "room",
+    id: room.id,
+    name: room.name || room.longName || String(room.id),
+    longName: room.longName || room.name || String(room.id),
+    searchText: buildSearchText(room.name, room.longName, room.alternateName),
+  }));
+}
+
+function mapClassesToSearchItems(classes: Klasse[]): TimetableSearchItem[] {
+  return classes.map((klasse) => ({
+    type: "class",
+    id: klasse.id,
+    name: klasse.name || klasse.longName || String(klasse.id),
+    longName: klasse.longName || klasse.name || String(klasse.id),
+    searchText: buildSearchText(klasse.name, klasse.longName),
+  }));
+}
+
+export async function fetchTimetableSearchIndex(
   config: Config,
-  weekDate: Date
-): Promise<WeekTimetable> {
+): Promise<TimetableSearchItem[]> {
   const untis = new WebUntis(
     config.school,
     config.username,
     config.password,
     config.server,
-    "tui-untis"
+    "tui-untis",
   );
 
   await untis.login();
 
   try {
+    const [teachers, rooms, classes] = await Promise.all([
+      untis.getTeachers(),
+      untis.getRooms(),
+      fetchClassesForSearch(untis),
+    ]);
+
+    return normalizeSearchItems([
+      ...mapClassesToSearchItems(classes),
+      ...mapRoomsToSearchItems(rooms),
+      ...mapTeachersToSearchItems(teachers),
+    ]);
+  } finally {
+    await untis.logout();
+  }
+}
+
+export async function fetchWeekTimetable(
+  config: Config,
+  weekDate: Date,
+  target?: TimetableTarget,
+): Promise<WeekTimetable> {
+  const normalizedTarget = normalizeTimetableTarget(target);
+  const untis = new WebUntis(
+    config.school,
+    config.username,
+    config.password,
+    config.server,
+    "tui-untis",
+  );
+
+  await untis.login();
+
+  try {
+    const request = resolveTimetableForWeekRequest(normalizedTarget);
+    const timetableRequest =
+      request.mode === "own"
+        ? untis.getOwnTimetableForWeek(weekDate, 1)
+        : untis.getTimetableForWeek(weekDate, request.id, request.type, 1);
+
     const [raw, timegridRaw] = await Promise.all([
-      untis.getOwnTimetableForWeek(weekDate, 1),
+      timetableRequest,
       untis.getTimegrid(),
     ]);
 
@@ -281,7 +469,7 @@ export async function fetchWeekTimetable(
     const result: WeekTimetable = { days, timegrid };
     const mondayStr = getMonday(weekDate).toISOString().split("T")[0];
     if (mondayStr) {
-      saveWeekToCache(mondayStr, result);
+      saveWeekToCache(mondayStr, result, targetToCacheKey(normalizedTarget));
     }
 
     return result;
@@ -293,18 +481,20 @@ export async function fetchWeekTimetable(
 export async function getWeekTimetableWithCache(
   config: Config,
   weekDate: Date,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  target?: TimetableTarget,
 ): Promise<{ data: WeekTimetable; fromCache: boolean }> {
   const mondayStr = getMonday(weekDate).toISOString().split("T")[0]!;
+  const targetKey = targetToCacheKey(target);
 
   if (!forceRefresh) {
-    const cached = getCachedWeek(mondayStr);
+    const cached = getCachedWeek(mondayStr, targetKey);
     if (cached) {
       return { data: cached, fromCache: true };
     }
   }
 
-  const data = await fetchWeekTimetable(config, weekDate);
+  const data = await fetchWeekTimetable(config, weekDate, target);
   return { data, fromCache: false };
 }
 

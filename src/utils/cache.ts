@@ -9,11 +9,14 @@ const MAX_CACHED_WEEKS = 12;
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 21;
 
 interface CacheData {
-  // Key is ISO Monday date string
-  weeks: Record<string, {
-    data: WeekTimetable;
-    timestamp: number;
-  }>;
+  // Key is "{targetKey}:{mondayISO}" (legacy: "mondayISO" for own timetable)
+  weeks: Record<
+    string,
+    {
+      data: WeekTimetable;
+      timestamp: number;
+    }
+  >;
 }
 
 function ensureCacheDir() {
@@ -22,16 +25,53 @@ function ensureCacheDir() {
   }
 }
 
-export function getCachedWeek(mondayStr: string): WeekTimetable | null {
+export function buildWeekCacheKey(
+  mondayStr: string,
+  targetKey: string = "own",
+): string {
+  const normalizedTargetKey = targetKey.trim() || "own";
+  return `${normalizedTargetKey}:${mondayStr}`;
+}
+
+export function getWeekLookupKeys(
+  mondayStr: string,
+  targetKey: string = "own",
+): string[] {
+  const normalizedTargetKey = targetKey.trim() || "own";
+  if (normalizedTargetKey === "own") {
+    return [buildWeekCacheKey(mondayStr, normalizedTargetKey), mondayStr];
+  }
+
+  return [buildWeekCacheKey(mondayStr, normalizedTargetKey)];
+}
+
+export function getCachedWeek(
+  mondayStr: string,
+  targetKey: string = "own",
+): WeekTimetable | null {
   try {
     if (!existsSync(CACHE_FILE)) return null;
     const raw = readFileSync(CACHE_FILE, "utf-8");
     const cache: CacheData = JSON.parse(raw);
-    
-    const week = cache.weeks[mondayStr];
+
+    const lookupKeys = getWeekLookupKeys(mondayStr, targetKey);
+    let week: CacheData["weeks"][string] | undefined;
+    let storageKey = "";
+
+    for (const lookupKey of lookupKeys) {
+      const existing = cache.weeks[lookupKey];
+      if (!existing) continue;
+      week = existing;
+      storageKey = lookupKey;
+      break;
+    }
+
     if (!week) return null;
+
     if (Date.now() - week.timestamp > CACHE_TTL_MS) {
-      delete cache.weeks[mondayStr];
+      if (storageKey) {
+        delete cache.weeks[storageKey];
+      }
       writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
       return null;
     }
@@ -39,13 +79,13 @@ export function getCachedWeek(mondayStr: string): WeekTimetable | null {
     // Convert string dates back to Date objects
     return {
       ...week.data,
-      days: week.data.days.map(day => ({
+      days: week.data.days.map((day) => ({
         ...day,
         date: new Date(day.date),
         lessons: day.lessons.map((lesson, index) =>
           ensureLessonInstanceId(lesson, day.date, index),
         ),
-      }))
+      })),
     };
   } catch {
     return null;
@@ -70,17 +110,23 @@ function ensureLessonInstanceId(
   };
 }
 
-export function saveWeekToCache(mondayStr: string, data: WeekTimetable): void {
+export function saveWeekToCache(
+  mondayStr: string,
+  data: WeekTimetable,
+  targetKey: string = "own",
+): void {
   try {
     ensureCacheDir();
     let cache: CacheData = { weeks: {} };
     if (existsSync(CACHE_FILE)) {
       cache = JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
     }
-    
-    cache.weeks[mondayStr] = {
+
+    const storageKey = buildWeekCacheKey(mondayStr, targetKey);
+
+    cache.weeks[storageKey] = {
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     const entries = Object.entries(cache.weeks)

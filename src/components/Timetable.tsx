@@ -1,17 +1,28 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, useApp, useStdout } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import Spinner from "ink-spinner";
+import TextInput from "ink-text-input";
 import { COLORS } from "./colors.ts";
 import type { Config } from "../utils/config.ts";
 import GridRow from "./timetable/GridRow.tsx";
 import TimetableDetails from "./timetable/TimetableDetails.tsx";
 import TimetableHeader from "./timetable/TimetableHeader.tsx";
+import { useInputCapture } from "./inputCapture.tsx";
+import { isShortcutPressed } from "./shortcuts.ts";
 import {
   buildOverlayIndex,
   EMPTY_LESSONS,
   findCurrentPeriodIndex,
   indexLessonsByPeriod,
 } from "./timetable/model.ts";
+import {
+  formatTimetableTargetLabel,
+  type TimetableTarget,
+} from "../utils/untis.ts";
+import {
+  formatTimetableSearchTypeLabel,
+  searchTimetableTargets,
+} from "./timetable/search.ts";
 import { buildGridDivider, centerText } from "./timetable/text.ts";
 import { useTimetableData } from "./timetable/useTimetableData.ts";
 import { useTimetableNavigation } from "./timetable/useTimetableNavigation.ts";
@@ -24,10 +35,11 @@ interface TimetableProps {
 }
 
 const GRID_ROW_HEIGHT = 3;
-const TIMETABLE_HEADER_ROWS = 2;
+const TIMETABLE_HEADER_ROWS = 3;
 const DAY_HEADER_ROWS = 2;
 const MAX_SCROLL_HINT_ROWS = 2;
 const MIN_DETAILS_ROWS = 4;
+const SEARCH_RESULT_LIMIT = 12;
 
 export default function Timetable({
   config,
@@ -49,9 +61,21 @@ export default function Timetable({
     refreshCurrentWeek,
     currentMonday,
     currentFriday,
+    activeTarget,
+    setActiveTarget,
+    clearActiveTarget,
+    searchIndex,
+    searchIndexLoading,
+    searchIndexError,
+    ensureSearchIndexLoaded,
   } = useTimetableData(config);
 
   const [now, setNow] = useState(new Date());
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [searchSelectedIdx, setSearchSelectedIdx] = useState(0);
+
+  useInputCapture(searchMode);
 
   const termWidth = Math.max(50, stdout?.columns ?? 120);
   const termHeight = Math.max(18, (stdout?.rows ?? 24) - topInset);
@@ -62,8 +86,24 @@ export default function Timetable({
     Math.floor((termWidth - timeColumnWidth - 2) / 5),
   );
 
+  const searchResults = useMemo(
+    () => searchTimetableTargets(searchIndex, searchDraft, SEARCH_RESULT_LIMIT),
+    [searchIndex, searchDraft],
+  );
+  const visibleSearchCount = searchMode ? Math.min(6, Math.max(searchResults.length, 1)) : 0;
+  const visibleSearchResults = useMemo(
+    () => searchResults.slice(0, Math.max(1, Math.min(visibleSearchCount, searchResults.length))),
+    [searchResults, visibleSearchCount],
+  );
+  const searchPanelRows = searchMode ? 2 + visibleSearchCount : 0;
+  const targetLabel = useMemo(
+    () => formatTimetableTargetLabel(activeTarget),
+    [activeTarget],
+  );
+
   const reservedRows =
     TIMETABLE_HEADER_ROWS +
+    searchPanelRows +
     DAY_HEADER_ROWS +
     MAX_SCROLL_HINT_ROWS +
     MIN_DETAILS_ROWS;
@@ -75,6 +115,75 @@ export default function Timetable({
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!searchMode) return;
+    ensureSearchIndexLoaded();
+  }, [ensureSearchIndexLoaded, searchMode]);
+
+  useEffect(() => {
+    setSearchSelectedIdx((prev) =>
+      Math.min(prev, Math.max(visibleSearchResults.length - 1, 0)),
+    );
+  }, [visibleSearchResults.length]);
+
+  useInput(
+    (input, key) => {
+      if (searchMode) {
+        if (isShortcutPressed("timetable-search-cancel", input, key)) {
+          setSearchMode(false);
+          return;
+        }
+
+        if (isShortcutPressed("timetable-search-up", input, key)) {
+          setSearchSelectedIdx((prev) =>
+            Math.max(0, Math.min(prev - 1, Math.max(visibleSearchResults.length - 1, 0))),
+          );
+          return;
+        }
+
+        if (isShortcutPressed("timetable-search-down", input, key)) {
+          setSearchSelectedIdx((prev) =>
+            Math.max(0, Math.min(prev + 1, Math.max(visibleSearchResults.length - 1, 0))),
+          );
+          return;
+        }
+
+        if (isShortcutPressed("timetable-search-submit", input, key)) {
+          const selected = visibleSearchResults[searchSelectedIdx];
+          if (!selected) {
+            setSearchMode(false);
+            return;
+          }
+
+          const nextTarget: TimetableTarget = {
+            type: selected.type,
+            id: selected.id,
+            name: selected.name,
+            longName: selected.longName,
+          };
+          setActiveTarget(nextTarget);
+          setSearchMode(false);
+          return;
+        }
+
+        return;
+      }
+
+      if (isShortcutPressed("timetable-search", input, key)) {
+        setSearchDraft("");
+        setSearchSelectedIdx(0);
+        setSearchMode(true);
+        ensureSearchIndexLoaded();
+        return;
+      }
+
+      if (isShortcutPressed("timetable-target-clear", input, key)) {
+        clearActiveTarget();
+      }
+    },
+    { isActive: inputEnabled && Boolean(process.stdin.isTTY) },
+  );
 
   const dayLessonIndex = useMemo(
     () => (data ? indexLessonsByPeriod(data.days, data.timegrid) : []),
@@ -101,7 +210,7 @@ export default function Timetable({
     onQuit: exit,
     onLogout,
     onRefresh: refreshCurrentWeek,
-    inputEnabled,
+    inputEnabled: inputEnabled && !searchMode,
   });
 
   const visiblePeriods = useMemo(() => {
@@ -144,6 +253,7 @@ export default function Timetable({
     2,
     termHeight -
       TIMETABLE_HEADER_ROWS -
+      searchPanelRows -
       (data ? DAY_HEADER_ROWS : 0) -
       topHintRows -
       bottomHintRows -
@@ -223,10 +333,8 @@ export default function Timetable({
       .map((entry) => entry.lesson);
   }, [data, dayLessonIndex, selectedDayIdx, selectedPeriodIdx, selectedLesson]);
 
-  const dividerLine = "─".repeat(Math.max(10, timeColumnWidth + dayColumnWidth * 5));
   const headerDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┼");
   const bottomDividerLine = buildGridDivider(timeColumnWidth, dayColumnWidth, 5, "┴");
-
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight} paddingX={0}>
       <TimetableHeader
@@ -238,7 +346,54 @@ export default function Timetable({
         currentMonday={currentMonday}
         currentFriday={currentFriday}
         weekOffset={weekOffset}
+        targetLabel={targetLabel}
       />
+
+      {searchMode && (
+        <Box flexDirection="column">
+          <Box>
+            <Text color={COLORS.brand}>Target Search: </Text>
+            <TextInput
+              value={searchDraft}
+              onChange={(value) => {
+                setSearchDraft(value);
+                setSearchSelectedIdx(0);
+              }}
+              placeholder="class, room, teacher"
+              focus
+            />
+          </Box>
+          <Box>
+            {searchIndexLoading ? (
+              <Text color={COLORS.warning}>
+                <Spinner type="dots" /> Loading timetable targets...
+              </Text>
+            ) : searchIndexError ? (
+              <Text color={COLORS.error}>
+                {`Target load failed: ${searchIndexError}`}
+              </Text>
+            ) : visibleSearchResults.length === 0 ? (
+              <Text dimColor>No targets found for this query.</Text>
+            ) : (
+              <Text dimColor>Use ↑/↓ to choose, Enter to apply, Esc to cancel.</Text>
+            )}
+          </Box>
+          {!searchIndexLoading &&
+            !searchIndexError &&
+            visibleSearchResults.map((result, idx) => {
+              const selected = idx === searchSelectedIdx;
+              return (
+                <Box key={`${result.type}:${result.id}`}>
+                  <Text color={selected ? COLORS.brand : COLORS.neutral.gray} bold={selected}>
+                    {selected ? "> " : "  "}
+                  </Text>
+                  <Text dimColor>{`[${formatTimetableSearchTypeLabel(result.type)}] `}</Text>
+                  <Text>{`${result.name}${result.longName !== result.name ? ` (${result.longName})` : ""}`}</Text>
+                </Box>
+              );
+            })}
+        </Box>
+      )}
 
       {data && (
         <Box flexDirection="column">

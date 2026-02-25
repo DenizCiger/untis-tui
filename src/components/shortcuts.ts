@@ -171,6 +171,42 @@ const SHORTCUTS: ShortcutDefinition[] = [
     match: (input) => input === "r",
   },
   {
+    id: "timetable-search",
+    keys: "/",
+    action: "Open timetable target search",
+    match: (input) => input === "/",
+  },
+  {
+    id: "timetable-target-clear",
+    keys: "c",
+    action: "Switch back to own timetable",
+    match: (input) => input === "c",
+  },
+  {
+    id: "timetable-search-up",
+    keys: "Up",
+    action: "Move search highlight up",
+    match: (_input, key) => key.upArrow,
+  },
+  {
+    id: "timetable-search-down",
+    keys: "Down",
+    action: "Move search highlight down",
+    match: (_input, key) => key.downArrow,
+  },
+  {
+    id: "timetable-search-submit",
+    keys: "Enter",
+    action: "Apply highlighted timetable target",
+    match: (_input, key) => key.return,
+  },
+  {
+    id: "timetable-search-cancel",
+    keys: "Esc",
+    action: "Cancel timetable target search",
+    match: (_input, key) => key.escape,
+  },
+  {
     id: "absences-up",
     keys: "Up or k",
     action: "Move selection up",
@@ -312,6 +348,17 @@ export function getShortcutSections(activeTab: TabId): ShortcutSection[] {
           "timetable-cycle-overlap",
           "timetable-today",
           "timetable-refresh",
+          "timetable-search",
+          "timetable-target-clear",
+        ]),
+      },
+      {
+        title: "Timetable Search Input",
+        items: pick([
+          "timetable-search-up",
+          "timetable-search-down",
+          "timetable-search-submit",
+          "timetable-search-cancel",
         ]),
       },
     ];
