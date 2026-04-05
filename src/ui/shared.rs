@@ -1,7 +1,7 @@
-use super::theme::{BRAND, DIM_GRAY, SELECT_BG};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
+use super::theme::{ ALT_BG, BRAND, DIM_GRAY, SELECT_BG };
+use ratatui::layout::{ Constraint, Direction, Layout, Rect };
+use ratatui::style::{ Color, Modifier, Style };
+use ratatui::text::{ Line, Span };
 use unicode_width::UnicodeWidthStr;
 
 pub(super) fn line_with_right(
@@ -9,7 +9,7 @@ pub(super) fn line_with_right(
     right: &str,
     width: usize,
     left_style: Style,
-    right_style: Style,
+    right_style: Style
 ) -> Line<'static> {
     if right.is_empty() {
         return Line::from(Span::styled(truncate_text(left, width), left_style));
@@ -26,11 +26,13 @@ pub(super) fn line_with_right(
         left.to_owned()
     };
     let gap = width.saturating_sub(UnicodeWidthStr::width(left_text.as_str()) + right_width);
-    Line::from(vec![
-        Span::styled(left_text, left_style),
-        Span::raw(" ".repeat(gap)),
-        Span::styled(right.to_owned(), right_style),
-    ])
+    Line::from(
+        vec![
+            Span::styled(left_text, left_style),
+            Span::raw(" ".repeat(gap)),
+            Span::styled(right.to_owned(), right_style)
+        ]
+    )
 }
 
 pub(super) fn filter_chip(label: &str, active: bool) -> Span<'static> {
@@ -38,7 +40,7 @@ pub(super) fn filter_chip(label: &str, active: bool) -> Span<'static> {
         format!(" {label} "),
         Style::default()
             .fg(if active { Color::Indexed(15) } else { DIM_GRAY })
-            .bg(if active { SELECT_BG } else { Color::Reset }),
+            .bg(if active { SELECT_BG } else { Color::Reset })
     )
 }
 
@@ -54,7 +56,7 @@ pub(super) fn centered_message_lines(
     message: &str,
     height: u16,
     width: u16,
-    style: Style,
+    style: Style
 ) -> Vec<Line<'static>> {
     if height == 0 || width == 0 {
         return Vec::new();
@@ -66,10 +68,14 @@ pub(super) fn centered_message_lines(
     }
     let message_width = UnicodeWidthStr::width(message);
     let left_pad = usize::from(width).saturating_sub(message_width) / 2;
-    lines.push(Line::from(Span::styled(
-        format!("{}{}", " ".repeat(left_pad), truncate_text(message, usize::from(width))),
-        style,
-    )));
+    lines.push(
+        Line::from(
+            Span::styled(
+                format!("{}{}", " ".repeat(left_pad), truncate_text(message, usize::from(width))),
+                style
+            )
+        )
+    );
     lines
 }
 
@@ -78,7 +84,7 @@ pub(super) fn login_field_line(
     value: &str,
     placeholder: &str,
     focused: bool,
-    mask: bool,
+    mask: bool
 ) -> Line<'static> {
     let rendered = if value.is_empty() {
         placeholder.to_owned()
@@ -87,15 +93,17 @@ pub(super) fn login_field_line(
     } else {
         value.to_owned()
     };
-    Line::from(vec![
-        Span::styled(
-            format!("{}{}: ", if focused { "> " } else { "  " }, label),
-            Style::default()
-                .fg(if focused { BRAND } else { Color::Gray })
-                .add_modifier(if focused { Modifier::BOLD } else { Modifier::empty() }),
-        ),
-        Span::raw(rendered),
-    ])
+    Line::from(
+        vec![
+            Span::styled(
+                format!("{}{}: ", if focused { "> " } else { "  " }, label),
+                Style::default()
+                    .fg(if focused { BRAND } else { Color::Gray })
+                    .add_modifier(if focused { Modifier::BOLD } else { Modifier::empty() })
+            ),
+            Span::raw(rendered)
+        ]
+    )
 }
 
 pub(super) fn tab_span(label: &str, active: bool) -> Span<'static> {
@@ -103,26 +111,20 @@ pub(super) fn tab_span(label: &str, active: bool) -> Span<'static> {
         label.to_owned(),
         Style::default()
             .fg(if active { Color::Black } else { Color::White })
-            .bg(if active { BRAND } else { Color::DarkGray })
-            .add_modifier(if active { Modifier::BOLD } else { Modifier::empty() }),
+            .bg(if active { BRAND } else { ALT_BG })
+            .add_modifier(if active { Modifier::BOLD } else { Modifier::empty() })
     )
 }
 
 pub(super) fn styled_cell(text: &str, bg: Option<Color>, fg: Option<Color>) -> Span<'static> {
     Span::styled(
         text.to_owned(),
-        Style::default()
-            .bg(bg.unwrap_or(Color::Reset))
-            .fg(fg.unwrap_or(Color::Reset)),
+        Style::default().bg(bg.unwrap_or(Color::Reset)).fg(fg.unwrap_or(Color::Reset))
     )
 }
 
 pub(super) fn render_input_text(value: &str, cursor: usize, mask: bool) -> String {
-    let value = if mask {
-        "*".repeat(value.chars().count())
-    } else {
-        value.to_owned()
-    };
+    let value = if mask { "*".repeat(value.chars().count()) } else { value.to_owned() };
     if value.is_empty() {
         return "_".to_owned();
     }
@@ -141,9 +143,9 @@ pub(super) fn fit_text(value: &str, width: usize) -> String {
     }
     let mut result = String::new();
     for character in value.chars() {
-        if UnicodeWidthStr::width(result.as_str())
-            + UnicodeWidthStr::width(character.encode_utf8(&mut [0; 4]))
-            > width.saturating_sub(1)
+        if
+            UnicodeWidthStr::width(result.as_str()) +
+                UnicodeWidthStr::width(character.encode_utf8(&mut [0; 4])) > width.saturating_sub(1)
         {
             break;
         }
