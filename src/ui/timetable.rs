@@ -91,6 +91,7 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
             compact,
             time_width,
             day_width,
+            body_area.width,
             scroll_offset,
             &visible_periods
         );
@@ -104,7 +105,7 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
         let details_lines = build_timetable_details(
             state,
             content_layout[1].width,
-            Some(build_grid_divider(time_width, day_width, DAY_COUNT, "┴"))
+            Some(build_grid_divider(time_width, day_width, DAY_COUNT, "┴", content_layout[1].width))
         );
         frame.render_widget(
             Paragraph::new(grid_lines).wrap(Wrap { trim: false }),
@@ -281,6 +282,7 @@ fn build_timetable_grid_lines(
     compact: bool,
     time_width: u16,
     day_width: u16,
+    total_width: u16,
     scroll_offset: usize,
     visible_periods: &[(usize, &TimeUnit)]
 ) -> Vec<Line<'static>> {
@@ -294,7 +296,7 @@ fn build_timetable_grid_lines(
     lines.push(
         Line::from(
             Span::styled(
-                build_grid_divider(time_width, day_width, DAY_COUNT, "┼"),
+                build_grid_divider(time_width, day_width, DAY_COUNT, "┼", total_width),
                 Style::default().fg(DIM_GRAY)
             )
         )
@@ -431,13 +433,12 @@ fn build_period_row_lines(
         } else if can_render_split && overlay.map(|value| value.split).unwrap_or(false) {
             build_split_cell_lines(overlay.unwrap(), selected_entry, cell_width, color_map)
         } else if lessons.len() > 1 {
-            let label = if
-                let Some(entry) = (if is_anchor_focused {
-                    selected_entry.or_else(|| lessons.first())
-                } else {
-                    lessons.first()
-                })
-            {
+            let preview_entry = if is_anchor_focused {
+                selected_entry.or_else(|| lessons.first())
+            } else {
+                lessons.first()
+            };
+            let label = if let Some(entry) = preview_entry {
                 format!("{} +{}", entry.lesson.subject, lessons.len().saturating_sub(1))
             } else {
                 format!("{}x", lessons.len())
@@ -744,11 +745,7 @@ fn build_timetable_details(
             .unwrap_or(state.main.timetable.selected_lesson_idx + 1);
 
         let teacher_label = if lesson.all_teachers.len() > 1 { "Teachers" } else { "Teacher" };
-        let classes = if lesson.all_classes.is_empty() {
-            "N/A".to_owned()
-        } else {
-            lesson.all_classes.join(", ")
-        };
+        let classes = lesson.all_classes.clone();
         let room_short = lesson.room.as_str();
         let room_long = lesson.room_long_name.as_str();
         let badge = lesson_type_badge(&lesson);
@@ -759,42 +756,41 @@ fn build_timetable_details(
         let title_right_style = Style::default().fg(WARNING);
 
         if let Some((badge_text, badge_style)) = badge {
-            let right_width = UnicodeWidthStr::width(time.as_str());
             let padded_badge = format!(" {badge_text} ");
-            let left_max = usize::from(width).saturating_sub(right_width + 1);
             let badge_width = UnicodeWidthStr::width(padded_badge.as_str());
             let left_title = truncate_text(
                 title.as_str(),
-                left_max.saturating_sub(badge_width + 1)
+                usize::from(width).saturating_sub(badge_width + 1)
             );
-            let gap = usize
-                ::from(width)
-                .saturating_sub(
-                    UnicodeWidthStr::width(left_title.as_str()) + 1 + badge_width + right_width
-                )
-                .max(1);
             lines.push(
                 Line::from(
                     vec![
                         Span::styled(left_title, title_left_style),
                         Span::raw(" "),
-                        Span::styled(padded_badge, badge_style),
-                        Span::raw(" ".repeat(gap)),
-                        Span::styled(time, title_right_style)
+                        Span::styled(padded_badge, badge_style)
                     ]
                 )
             );
         } else {
             lines.push(
-                line_with_right(
-                    title.as_str(),
-                    time.as_str(),
-                    usize::from(width),
-                    title_left_style,
-                    title_right_style
+                Line::from(
+                    Span::styled(
+                        truncate_text(title.as_str(), usize::from(width)),
+                        title_left_style
+                    )
                 )
             );
         }
+        lines.push(
+            Line::from(
+                vec![
+                    Span::styled(
+                        truncate_text(time.as_str(), usize::from(width.saturating_sub(2))),
+                        title_right_style
+                    )
+                ]
+            )
+        );
 
         let mut teacher_spans = vec![
             Span::styled(format!("{} · ", teacher_label), Style::default().fg(DIM_GRAY))
@@ -807,7 +803,7 @@ fn build_timetable_details(
                     Span::styled("Room · ", Style::default().fg(DIM_GRAY)),
                     Span::styled(
                         (if room_short.is_empty() { "N/A" } else { room_short }).to_owned(),
-                        Style::default().add_modifier(Modifier::BOLD)
+                        Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
                     ),
                     if !room_short.is_empty() && !room_long.is_empty() && room_long != room_short {
                         Span::raw(format!(" ({room_long})"))
@@ -818,14 +814,13 @@ fn build_timetable_details(
             )
         );
         lines.push(
-            Line::from(
-                vec![
-                    Span::styled("Classes · ", Style::default().fg(DIM_GRAY)),
-                    Span::raw(
-                        truncate_text(classes.as_str(), usize::from(width.saturating_sub(10)))
-                    )
-                ]
-            )
+            Line::from({
+                let mut class_spans = vec![
+                    Span::styled("Classes · ", Style::default().fg(DIM_GRAY))
+                ];
+                class_spans.extend(build_class_value_spans(&classes));
+                class_spans
+            })
         );
         if overlaps > 1 {
             lines.push(
@@ -874,41 +869,41 @@ fn build_timetable_details(
                 )
             );
         } else if overlaps > 1 {
-            let sibling_text = state
+            let siblings = state
                 .current_timetable_lessons()
                 .into_iter()
                 .enumerate()
                 .filter(|(index, _)| *index != state.main.timetable.selected_lesson_idx)
                 .map(|(_, entry)| entry)
-                .map(|entry| {
-                    let mut meta = entry.subject.clone();
+                .collect::<Vec<_>>();
+
+            if !siblings.is_empty() {
+                let mut also_spans = vec![Span::styled("Also: ", Style::default().fg(DIM_GRAY))];
+                for (idx, entry) in siblings.into_iter().enumerate() {
+                    if idx > 0 {
+                        also_spans.push(Span::styled(" | ", Style::default().fg(DIM_GRAY)));
+                    }
+                    also_spans.push(Span::styled(entry.subject, Style::default().fg(DIM_GRAY)));
                     if !entry.room.is_empty() {
-                        meta.push(' ');
-                        meta.push_str(entry.room.as_str());
+                        also_spans.push(Span::raw(" "));
+                        also_spans.push(
+                            Span::styled(
+                                entry.room,
+                                Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD)
+                            )
+                        );
                     }
                     if !entry.teacher.is_empty() {
-                        meta.push(' ');
-                        meta.push_str(entry.teacher.as_str());
+                        also_spans.push(Span::raw(" "));
+                        also_spans.push(
+                            Span::styled(
+                                entry.teacher,
+                                Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD)
+                            )
+                        );
                     }
-                    meta
-                })
-                .collect::<Vec<_>>()
-                .join(" | ");
-            if !sibling_text.is_empty() {
-                lines.push(
-                    Line::from(
-                        Span::styled(
-                            format!(
-                                "Also: {}",
-                                fit_text(
-                                    sibling_text.as_str(),
-                                    usize::from(width.saturating_sub(6))
-                                )
-                            ),
-                            Style::default().fg(DIM_GRAY)
-                        )
-                    )
-                );
+                }
+                lines.push(Line::from(also_spans));
             }
         }
         return lines;
@@ -972,7 +967,10 @@ fn build_teacher_spans(lesson: &ParsedLesson) -> Vec<Span<'static>> {
             }
             let long_name = lesson.all_teacher_long_names.get(index).cloned().unwrap_or_default();
             spans.push(
-                Span::styled(short_name.clone(), Style::default().add_modifier(Modifier::BOLD))
+                Span::styled(
+                    short_name.clone(),
+                    Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
+                )
             );
             if !long_name.is_empty() && long_name != *short_name {
                 spans.push(Span::raw(format!(" ({long_name})")));
@@ -987,7 +985,12 @@ fn build_teacher_spans(lesson: &ParsedLesson) -> Vec<Span<'static>> {
         } else {
             lesson.teacher.clone()
         };
-        spans.push(Span::styled(short_name.clone(), Style::default().add_modifier(Modifier::BOLD)));
+        spans.push(
+            Span::styled(
+                short_name.clone(),
+                Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
+            )
+        );
         if !lesson.teacher_long_name.is_empty() && lesson.teacher_long_name != short_name {
             spans.push(Span::raw(format!(" ({})", lesson.teacher_long_name)));
         }
@@ -998,11 +1001,44 @@ fn build_teacher_spans(lesson: &ParsedLesson) -> Vec<Span<'static>> {
     spans
 }
 
-fn build_grid_divider(time_width: u16, day_width: u16, day_count: usize, junction: &str) -> String {
+fn build_class_value_spans(classes: &[String]) -> Vec<Span<'static>> {
+    if classes.is_empty() {
+        return vec![Span::raw("N/A")];
+    }
+
+    let mut spans = Vec::new();
+    for (index, class_name) in classes.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(", "));
+        }
+        spans.push(
+            Span::styled(
+                class_name.clone(),
+                Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
+            )
+        );
+    }
+    spans
+}
+
+fn build_grid_divider(
+    time_width: u16,
+    day_width: u16,
+    day_count: usize,
+    junction: &str,
+    total_width: u16
+) -> String {
     let mut line = "─".repeat(usize::from(time_width));
     for _ in 0..day_count {
         line.push_str(junction);
         line.push_str(&"─".repeat(usize::from(day_width.saturating_sub(1))));
+    }
+    let target_width = usize::from(total_width);
+    let current_width = UnicodeWidthStr::width(line.as_str());
+    if current_width < target_width {
+        line.push_str(&"─".repeat(target_width - current_width));
+    } else if current_width > target_width {
+        line = line.chars().take(target_width).collect();
     }
     line
 }
