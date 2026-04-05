@@ -1,0 +1,21 @@
+[package]
+name = "untis-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.22.1"
+chrono = { version = "0.4.42", features = ["serde"] }
+crossterm = "0.29.0"
+directories = "6.0.0"
+ratatui = "0.30.0"
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+tokio = { version = "1.51.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
+unicode-normalization = "0.1.24"
+unicode-width = "0.2.2"
+
+[dev-dependencies]
+tempfile = "3.23.0"
