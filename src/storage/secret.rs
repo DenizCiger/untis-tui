@@ -44,7 +44,9 @@ fn windows_shell_command() -> Result<String, StorageError> {
             return Ok(candidate.to_owned());
         }
     }
-    Err(StorageError::Message("No PowerShell executable found".to_owned()))
+    Err(StorageError::Message(
+        "No PowerShell executable found".to_owned(),
+    ))
 }
 
 fn run_command(command: &str, args: &[&str], input: Option<&str>) -> Result<String, StorageError> {
@@ -128,7 +130,9 @@ pub fn get_secure_storage_diagnostic() -> SecretStorageDiagnostic {
         if !command_exists("security") {
             return SecretStorageDiagnostic {
                 available: false,
-                message: "macOS Keychain CLI not found; auto-login password storage is unavailable.".to_owned(),
+                message:
+                    "macOS Keychain CLI not found; auto-login password storage is unavailable."
+                        .to_owned(),
             };
         }
         return SecretStorageDiagnostic {

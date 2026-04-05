@@ -55,7 +55,9 @@ pub fn is_shortcut_pressed(id: &str, key: KeyEvent) -> bool {
         "timetable-down" => {
             key.code == KeyCode::Down && !key.modifiers.contains(KeyModifiers::SHIFT)
         }
-        "timetable-up-step" => key.code == KeyCode::Up && key.modifiers.contains(KeyModifiers::SHIFT),
+        "timetable-up-step" => {
+            key.code == KeyCode::Up && key.modifiers.contains(KeyModifiers::SHIFT)
+        }
         "timetable-down-step" => {
             key.code == KeyCode::Down && key.modifiers.contains(KeyModifiers::SHIFT)
         }
@@ -261,7 +263,10 @@ mod tests {
 
     #[test]
     fn shortcut_registry_uses_lesson_jump_bindings_for_timetable_vertical_nav() {
-        assert!(is_shortcut_pressed("timetable-up", key(KeyCode::Up, KeyModifiers::NONE)));
+        assert!(is_shortcut_pressed(
+            "timetable-up",
+            key(KeyCode::Up, KeyModifiers::NONE)
+        ));
         assert!(is_shortcut_pressed(
             "timetable-down",
             key(KeyCode::Down, KeyModifiers::NONE)
@@ -274,7 +279,10 @@ mod tests {
             "timetable-page-down",
             key(KeyCode::PageDown, KeyModifiers::NONE)
         ));
-        assert!(is_shortcut_pressed("timetable-home", key(KeyCode::Home, KeyModifiers::NONE)));
+        assert!(is_shortcut_pressed(
+            "timetable-home",
+            key(KeyCode::Home, KeyModifiers::NONE)
+        ));
     }
 
     #[test]
@@ -294,7 +302,15 @@ mod tests {
         let timetable_sections = get_shortcut_sections(TabId::Timetable);
         let absences_sections = get_shortcut_sections(TabId::Absences);
 
-        assert!(timetable_sections.iter().any(|section| section.title == "Timetable"));
-        assert!(absences_sections.iter().any(|section| section.title == "Absences"));
+        assert!(
+            timetable_sections
+                .iter()
+                .any(|section| section.title == "Timetable")
+        );
+        assert!(
+            absences_sections
+                .iter()
+                .any(|section| section.title == "Absences")
+        );
     }
 }

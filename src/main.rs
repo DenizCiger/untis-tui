@@ -96,21 +96,23 @@ fn handle_commands(
 }
 
 fn spawn_input_thread(tx: mpsc::UnboundedSender<RuntimeEvent>) {
-    std::thread::spawn(move || loop {
-        if !event::poll(Duration::from_millis(100)).unwrap_or(false) {
-            continue;
-        }
-        match event::read() {
-            Ok(CrosstermEvent::Key(key)) => {
-                if key.kind == KeyEventKind::Press {
-                    let _ = tx.send(RuntimeEvent::Key(key));
+    std::thread::spawn(move || {
+        loop {
+            if !event::poll(Duration::from_millis(100)).unwrap_or(false) {
+                continue;
+            }
+            match event::read() {
+                Ok(CrosstermEvent::Key(key)) => {
+                    if key.kind == KeyEventKind::Press {
+                        let _ = tx.send(RuntimeEvent::Key(key));
+                    }
                 }
+                Ok(CrosstermEvent::Resize(width, height)) => {
+                    let _ = tx.send(RuntimeEvent::Resize(width, height));
+                }
+                Ok(_) => {}
+                Err(_) => break,
             }
-            Ok(CrosstermEvent::Resize(width, height)) => {
-                let _ = tx.send(RuntimeEvent::Resize(width, height));
-            }
-            Ok(_) => {}
-            Err(_) => break,
         }
     });
 }
@@ -150,7 +152,10 @@ fn execute_command(tx: mpsc::UnboundedSender<RuntimeEvent>, command: AppCommand)
                 }));
             });
         }
-        AppCommand::LoadSearchIndex { profile_key, config } => {
+        AppCommand::LoadSearchIndex {
+            profile_key,
+            config,
+        } => {
             tokio::spawn(async move {
                 let result = WebUntisClient::fetch_timetable_search_index(&config)
                     .await
@@ -195,17 +200,15 @@ async fn load_absence_chunk(
     let mut has_more = true;
     let mut days_loaded = chunk_index * 45;
 
-    for (index, (range_start, range_end)) in build_absence_chunk_request(base_date, chunk_index, is_initial)
-        .into_iter()
-        .enumerate()
+    for (index, (range_start, range_end)) in
+        build_absence_chunk_request(base_date, chunk_index, is_initial)
+            .into_iter()
+            .enumerate()
     {
-        let items = WebUntisClient::fetch_absences_for_range(config, range_start, range_end).await?;
+        let items =
+            WebUntisClient::fetch_absences_for_range(config, range_start, range_end).await?;
         let (updated_chunk_index, updated_empty_streak, updated_has_more, updated_days_loaded) =
-            update_absence_chunk_progress(
-                chunk_index + index,
-                empty_chunk_streak,
-                items.len(),
-            );
+            update_absence_chunk_progress(chunk_index + index, empty_chunk_streak, items.len());
         next_chunk_index = updated_chunk_index;
         empty_chunk_streak = updated_empty_streak;
         has_more = updated_has_more;

@@ -197,13 +197,25 @@ struct RawWeeklyLesson {
 }
 
 #[derive(Debug, Deserialize)]
-struct AbsencesResponse {
-    data: AbsencesPayload,
+struct AbsencesPayload {
+    #[serde(default)]
+    absences: Vec<RawAbsence>,
 }
 
 #[derive(Debug, Deserialize)]
-struct AbsencesPayload {
-    absences: Vec<RawAbsence>,
+#[serde(untagged)]
+enum AbsencesResponse {
+    Wrapped { data: AbsencesPayload },
+    Flat(AbsencesPayload),
+}
+
+impl AbsencesResponse {
+    fn into_payload(self) -> AbsencesPayload {
+        match self {
+            Self::Wrapped { data } => data,
+            Self::Flat(data) => data,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -308,11 +320,7 @@ impl WebUntisClient {
             let timegrid = client.get_timegrid(&session).await?;
             let teachers = client.get_teachers(&session).await?;
             Ok(build_week_timetable(
-                week_date,
-                element_id,
-                weekly,
-                timegrid,
-                &teachers,
+                week_date, element_id, weekly, timegrid, &teachers,
             ))
         }
         .await;
@@ -328,31 +336,10 @@ impl WebUntisClient {
         let client = Self::new(config)?;
         let session = client.login().await?;
         let result = async {
-            let payload = client.get_absences(&session, range_start, range_end).await?;
-            let mut absences = payload
-                .absences
-                .into_iter()
-                .filter_map(|absence| {
-                    Some(ParsedAbsence {
-                        id: absence.id,
-                        student_name: if absence.student_name.is_empty() {
-                            config.username.clone()
-                        } else {
-                            absence.student_name
-                        },
-                        reason: absence.reason,
-                        text: absence.text,
-                        excuse_status: absence.excuse_status,
-                        is_excused: absence.is_excused,
-                        start_date: parse_untis_date(absence.start_date)?,
-                        end_date: parse_untis_date(absence.end_date)?,
-                        start_time: format_untis_time(absence.start_time),
-                        end_time: format_untis_time(absence.end_time),
-                    })
-                })
-                .collect::<Vec<_>>();
-            absences.sort_by(crate::models::compare_absence_newest_first);
-            Ok(absences)
+            let payload = client
+                .get_absences(&session, range_start, range_end)
+                .await?;
+            Ok(map_absence_payload(config, payload))
         }
         .await;
         let _ = client.logout(&session).await;
@@ -380,7 +367,9 @@ impl WebUntisClient {
         let envelope = response.json::<RpcEnvelope<UntisSession>>().await?;
         if let Some(result) = envelope.result {
             if result.session_id.is_empty() {
-                return Err(WebUntisError::Message("Failed to login. No session id.".to_owned()));
+                return Err(WebUntisError::Message(
+                    "Failed to login. No session id.".to_owned(),
+                ));
             }
             return Ok(result);
         }
@@ -445,7 +434,10 @@ impl WebUntisClient {
 
     fn cookie_header(&self, session: &UntisSession) -> String {
         let school_cookie = format!("_{}", BASE64_STANDARD.encode(self.config.school.as_bytes()));
-        format!("JSESSIONID={}; schoolname={school_cookie}", session.session_id)
+        format!(
+            "JSESSIONID={}; schoolname={school_cookie}",
+            session.session_id
+        )
     }
 
     fn url(&self, path: &str) -> String {
@@ -531,6 +523,7 @@ impl WebUntisClient {
         range_start: NaiveDate,
         range_end: NaiveDate,
     ) -> Result<AbsencesPayload, WebUntisError> {
+        // Match the Bun app's getAbsentLesson flow, which uses this classreg endpoint.
         let response = self
             .client
             .get(self.url("/WebUntis/api/classreg/absences/students"))
@@ -546,9 +539,36 @@ impl WebUntisClient {
         response
             .json::<AbsencesResponse>()
             .await
-            .map(|response| response.data)
+            .map(AbsencesResponse::into_payload)
             .map_err(Into::into)
     }
+}
+
+fn map_absence_payload(config: &Config, payload: AbsencesPayload) -> Vec<ParsedAbsence> {
+    let mut absences = payload
+        .absences
+        .into_iter()
+        .filter_map(|absence| {
+            Some(ParsedAbsence {
+                id: absence.id,
+                student_name: if absence.student_name.is_empty() {
+                    config.username.clone()
+                } else {
+                    absence.student_name
+                },
+                reason: absence.reason,
+                text: absence.text,
+                excuse_status: absence.excuse_status,
+                is_excused: absence.is_excused,
+                start_date: parse_untis_date(absence.start_date)?,
+                end_date: parse_untis_date(absence.end_date)?,
+                start_time: format_untis_time(absence.start_time),
+                end_time: format_untis_time(absence.end_time),
+            })
+        })
+        .collect::<Vec<_>>();
+    absences.sort_by(crate::models::compare_absence_newest_first);
+    absences
 }
 
 pub fn format_timetable_search_type_label(target_type: TimetableSearchTargetType) -> &'static str {
@@ -580,9 +600,8 @@ pub fn search_timetable_targets(
         .iter()
         .filter_map(|item| {
             let prepared = prepare_search_item(item);
-            get_match_rank(&prepared, &normalized_query, &tokens, &compact_query).map(|score| {
-                (item.clone(), score)
-            })
+            get_match_rank(&prepared, &normalized_query, &tokens, &compact_query)
+                .map(|score| (item.clone(), score))
         })
         .collect::<Vec<_>>();
     ranked.sort_by(|left, right| {
@@ -642,7 +661,9 @@ fn build_week_timetable(
     let mut days = Vec::new();
     for offset in 0..5 {
         let day_date = add_days(monday, i64::from(offset));
-        let date_num = format_untis_date(day_date).parse::<i32>().unwrap_or_default();
+        let date_num = format_untis_date(day_date)
+            .parse::<i32>()
+            .unwrap_or_default();
         let mut entries = by_date.remove(&date_num).unwrap_or_default();
         dedupe_day_entries(&mut entries);
         entries.sort_by(compare_lessons_for_display);
@@ -652,7 +673,9 @@ fn build_week_timetable(
             lessons: entries
                 .iter()
                 .enumerate()
-                .map(|(index, entry)| parse_timetable_entry(entry, index, date_num, &directories, &teacher_names))
+                .map(|(index, entry)| {
+                    parse_timetable_entry(entry, index, date_num, &directories, &teacher_names)
+                })
                 .collect(),
         });
     }
@@ -751,7 +774,18 @@ fn parse_timetable_entry(
         .filter_map(|element| {
             directories
                 .get(&(element.element_type, element.id))
-                .map(|directory| (element.element_type, element.id, directory.name.clone(), if directory.long_name.is_empty() { directory.name.clone() } else { directory.long_name.clone() }))
+                .map(|directory| {
+                    (
+                        element.element_type,
+                        element.id,
+                        directory.name.clone(),
+                        if directory.long_name.is_empty() {
+                            directory.name.clone()
+                        } else {
+                            directory.long_name.clone()
+                        },
+                    )
+                })
         })
         .collect::<Vec<_>>();
 
@@ -1071,7 +1105,9 @@ fn fuzzy_subsequence_penalty(haystack: &str, query: &str) -> Option<usize> {
     for character in query.chars() {
         let next = haystack[haystack_index..].find(character)?;
         let absolute = haystack_index + next;
-        penalty += previous.map(|prev| absolute.saturating_sub(prev + 1)).unwrap_or(absolute);
+        penalty += previous
+            .map(|prev| absolute.saturating_sub(prev + 1))
+            .unwrap_or(absolute);
         previous = Some(absolute);
         haystack_index = absolute + character.len_utf8();
     }
@@ -1163,7 +1199,7 @@ fn get_match_rank(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::parse_time_to_minutes;
+    use crate::models::{Config, parse_time_to_minutes};
 
     fn item(
         id: i64,
@@ -1187,35 +1223,83 @@ mod tests {
     fn timetable_search_ranking_matches_contains_case_insensitively() {
         let results = search_timetable_targets(
             &[
-                item(1, TimetableSearchTargetType::Teacher, "MrMiller", "Miller", None),
-                item(2, TimetableSearchTargetType::Room, "Room A12", "Science Room", None),
+                item(
+                    1,
+                    TimetableSearchTargetType::Teacher,
+                    "MrMiller",
+                    "Miller",
+                    None,
+                ),
+                item(
+                    2,
+                    TimetableSearchTargetType::Room,
+                    "Room A12",
+                    "Science Room",
+                    None,
+                ),
             ],
             "MILL",
             Some(10),
         );
-        assert_eq!(results.iter().map(|entry| entry.id).collect::<Vec<_>>(), vec![1]);
+        assert_eq!(
+            results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![1]
+        );
     }
 
     #[test]
     fn timetable_search_ranking_prioritizes_starts_with_over_contains_matches() {
         let results = search_timetable_targets(
             &[
-                item(1, TimetableSearchTargetType::Teacher, "Tina", "Teacher Tina", None),
-                item(2, TimetableSearchTargetType::Teacher, "Math", "Advanced Tina Group", None),
-                item(3, TimetableSearchTargetType::Teacher, "Bio", "Tina Biology", None),
+                item(
+                    1,
+                    TimetableSearchTargetType::Teacher,
+                    "Tina",
+                    "Teacher Tina",
+                    None,
+                ),
+                item(
+                    2,
+                    TimetableSearchTargetType::Teacher,
+                    "Math",
+                    "Advanced Tina Group",
+                    None,
+                ),
+                item(
+                    3,
+                    TimetableSearchTargetType::Teacher,
+                    "Bio",
+                    "Tina Biology",
+                    None,
+                ),
             ],
             "ti",
             Some(10),
         );
-        assert_eq!(results.iter().map(|entry| entry.id).collect::<Vec<_>>(), vec![1, 3, 2]);
+        assert_eq!(
+            results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![1, 3, 2]
+        );
     }
 
     #[test]
     fn timetable_search_ranking_keeps_mixed_type_ordering_stable_for_equal_rank() {
         let results = search_timetable_targets(
             &[
-                item(2, TimetableSearchTargetType::Teacher, "A-Name", "A-Name", None),
-                item(1, TimetableSearchTargetType::Class, "A-Name", "A-Name", None),
+                item(
+                    2,
+                    TimetableSearchTargetType::Teacher,
+                    "A-Name",
+                    "A-Name",
+                    None,
+                ),
+                item(
+                    1,
+                    TimetableSearchTargetType::Class,
+                    "A-Name",
+                    "A-Name",
+                    None,
+                ),
                 item(3, TimetableSearchTargetType::Room, "A-Name", "A-Name", None),
             ],
             "a-",
@@ -1252,7 +1336,10 @@ mod tests {
             "max mmax",
             None,
         );
-        assert_eq!(results.iter().map(|entry| entry.id).collect::<Vec<_>>(), vec![1]);
+        assert_eq!(
+            results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![1]
+        );
     }
 
     #[test]
@@ -1291,9 +1378,21 @@ mod tests {
             remarks: String::new(),
         };
         let periods = vec![
-            TimeUnit { name: "1".into(), start_time: "08:00".into(), end_time: "08:50".into() },
-            TimeUnit { name: "2".into(), start_time: "08:50".into(), end_time: "09:40".into() },
-            TimeUnit { name: "3".into(), start_time: "09:40".into(), end_time: "10:30".into() },
+            TimeUnit {
+                name: "1".into(),
+                start_time: "08:00".into(),
+                end_time: "08:50".into(),
+            },
+            TimeUnit {
+                name: "2".into(),
+                start_time: "08:50".into(),
+                end_time: "09:40".into(),
+            },
+            TimeUnit {
+                name: "3".into(),
+                start_time: "09:40".into(),
+                end_time: "10:30".into(),
+            },
         ];
         let hits = periods
             .iter()
@@ -1306,5 +1405,52 @@ mod tests {
             })
             .count();
         assert_eq!(hits, 2);
+    }
+
+    #[test]
+    fn absence_mapping_uses_bun_compatible_fields_and_sorting() {
+        let config = Config {
+            school: "school".into(),
+            username: "user".into(),
+            password: "secret".into(),
+            server: "mese.webuntis.com".into(),
+        };
+        let payload = AbsencesPayload {
+            absences: vec![
+                RawAbsence {
+                    id: 1,
+                    start_date: 20260115,
+                    end_date: 20260115,
+                    start_time: 815,
+                    end_time: 900,
+                    student_name: String::new(),
+                    reason: "Ill".into(),
+                    text: String::new(),
+                    excuse_status: "Open".into(),
+                    is_excused: false,
+                },
+                RawAbsence {
+                    id: 2,
+                    start_date: 20260120,
+                    end_date: 20260120,
+                    start_time: 700,
+                    end_time: 745,
+                    student_name: "Student".into(),
+                    reason: String::new(),
+                    text: "Doctor".into(),
+                    excuse_status: "Excused".into(),
+                    is_excused: true,
+                },
+            ],
+        };
+
+        let mapped = map_absence_payload(&config, payload);
+
+        assert_eq!(mapped.len(), 2);
+        assert_eq!(mapped[0].id, 2);
+        assert_eq!(mapped[0].student_name, "Student");
+        assert_eq!(mapped[1].id, 1);
+        assert_eq!(mapped[1].student_name, "user");
+        assert_eq!(mapped[1].start_time, "08:15");
     }
 }

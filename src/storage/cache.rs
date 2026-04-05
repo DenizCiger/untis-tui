@@ -42,7 +42,10 @@ pub fn get_week_lookup_keys(monday: &str, target_key: &str) -> Vec<String> {
     };
 
     if normalized_target_key == "own" {
-        vec![build_week_cache_key(monday, normalized_target_key), monday.to_owned()]
+        vec![
+            build_week_cache_key(monday, normalized_target_key),
+            monday.to_owned(),
+        ]
     } else {
         vec![build_week_cache_key(monday, normalized_target_key)]
     }
@@ -187,7 +190,10 @@ mod tests {
 
     #[test]
     fn week_cache_keys_create_target_scoped_keys() {
-        assert_eq!(build_week_cache_key("2026-01-05", "class:42"), "class:42:2026-01-05");
+        assert_eq!(
+            build_week_cache_key("2026-01-05", "class:42"),
+            "class:42:2026-01-05"
+        );
     }
 
     #[test]

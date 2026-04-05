@@ -43,27 +43,60 @@ fn render_login(frame: &mut Frame, state: &AppState) {
         Line::from("Enter your WebUntis credentials. Use arrows or Tab to change focus."),
         Line::from("Password is stored securely via your OS credentials store."),
         Line::from(""),
-        login_field_line("Server", &state.login.server.value, "e.g. mese.webuntis.com", state.login.active_field == LoginField::Server, false),
-        login_field_line("School", &state.login.school.value, "School from the URL", state.login.active_field == LoginField::School, false),
-        login_field_line("Username", &state.login.username.value, "WebUntis username", state.login.active_field == LoginField::Username, false),
-        login_field_line("Password", &state.login.password.value, "WebUntis password", state.login.active_field == LoginField::Password, !state.login.show_password),
+        login_field_line(
+            "Server",
+            &state.login.server.value,
+            "e.g. mese.webuntis.com",
+            state.login.active_field == LoginField::Server,
+            false,
+        ),
+        login_field_line(
+            "School",
+            &state.login.school.value,
+            "School from the URL",
+            state.login.active_field == LoginField::School,
+            false,
+        ),
+        login_field_line(
+            "Username",
+            &state.login.username.value,
+            "WebUntis username",
+            state.login.active_field == LoginField::Username,
+            false,
+        ),
+        login_field_line(
+            "Password",
+            &state.login.password.value,
+            "WebUntis password",
+            state.login.active_field == LoginField::Password,
+            !state.login.show_password,
+        ),
     ];
 
     if let Some(saved) = state.saved_login_config() {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("Saved account: ", Style::default().fg(BRAND)),
-            Span::raw(format!("{}@{} ({})", saved.username, saved.school, saved.server)),
+            Span::raw(format!(
+                "{}@{} ({})",
+                saved.username, saved.school, saved.server
+            )),
             Span::raw(" | Ctrl+l login"),
         ]));
     }
 
     if !state.app_error.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(state.app_error.clone(), Style::default().fg(ERROR))));
+        lines.push(Line::from(Span::styled(
+            state.app_error.clone(),
+            Style::default().fg(ERROR),
+        )));
     }
     if !state.login.error.is_empty() {
-        lines.push(Line::from(Span::styled(state.login.error.clone(), Style::default().fg(ERROR))));
+        lines.push(Line::from(Span::styled(
+            state.login.error.clone(),
+            Style::default().fg(ERROR),
+        )));
     }
     if !state.secure_storage_notice.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -72,7 +105,10 @@ fn render_login(frame: &mut Frame, state: &AppState) {
         )));
     }
     if state.login.loading {
-        lines.push(Line::from(Span::styled("Authenticating...", Style::default().fg(WARNING))));
+        lines.push(Line::from(Span::styled(
+            "Authenticating...",
+            Style::default().fg(WARNING),
+        )));
     } else {
         lines.push(Line::from(""));
         lines.push(Line::from(
@@ -122,7 +158,11 @@ fn render_main(frame: &mut Frame, state: &AppState) {
 fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(6), Constraint::Length(6)])
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(6),
+            Constraint::Length(6),
+        ])
         .split(area);
 
     let (monday, friday) = crate::models::current_week_range(state.main.timetable.week_offset);
@@ -136,28 +176,36 @@ fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) {
         }
     );
     let mut title_lines = vec![Line::from(vec![
-        Span::styled(title, Style::default().fg(BRAND).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            title,
+            Style::default().fg(BRAND).add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
         Span::styled(
-            if state.main.timetable.is_from_cache { "(cached)" } else { "" },
+            if state.main.timetable.is_from_cache {
+                "(cached)"
+            } else {
+                ""
+            },
             Style::default().fg(WARNING),
         ),
     ])];
     if let Some(config) = &state.config {
         title_lines.push(Line::from(format!("{}@{}", config.username, config.school)));
     }
-    frame.render_widget(
-        Paragraph::new(title_lines).block(Block::default().borders(Borders::ALL).title("Timetable")),
-        layout[0],
-    );
+    frame.render_widget(Paragraph::new(title_lines), layout[0]);
 
     frame.render_widget(
         Paragraph::new(build_timetable_lines(state))
-            .block(Block::default().borders(Borders::ALL).title(if state.main.timetable.loading {
-                "Loading timetable..."
-            } else {
-                "Grid"
-            }))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(if state.main.timetable.loading {
+                        "Loading timetable..."
+                    } else {
+                        "Grid"
+                    }),
+            )
             .wrap(Wrap { trim: false }),
         layout[1],
     );
@@ -173,9 +221,14 @@ fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
     let split_horizontal = area.width >= 118;
+    let header_height = if state.main.absences.error.is_empty() {
+        3
+    } else {
+        4
+    };
     let header = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .constraints([Constraint::Length(header_height), Constraint::Min(0)])
         .split(area);
 
     let filter_line = format!(
@@ -195,7 +248,14 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         )),
         Line::from(filter_line),
         Line::from(if state.main.absences.search_open {
-            format!("Search: {}", render_input_text(&state.main.absences.search_input.value, state.main.absences.search_input.cursor, false))
+            format!(
+                "Search: {}",
+                render_input_text(
+                    &state.main.absences.search_input.value,
+                    state.main.absences.search_input.cursor,
+                    false
+                )
+            )
         } else if state.main.absences.loading_initial {
             "Loading absences...".to_owned()
         } else if state.main.absences.loading_more {
@@ -210,10 +270,7 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(ERROR),
         )));
     }
-    frame.render_widget(
-        Paragraph::new(header_lines).block(Block::default().borders(Borders::ALL).title("Absences")),
-        header[0],
-    );
+    frame.render_widget(Paragraph::new(header_lines), header[0]);
 
     let body = if split_horizontal {
         Layout::default()
@@ -230,6 +287,8 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
     let list_rows = usize::from(body[0].height.saturating_sub(2)).max(3);
     let (visible_start, visible) = state.visible_absences(list_rows);
     let filtered = state.filtered_absences();
+    let has_active_filters = state.has_active_absence_filters();
+    let has_loaded_absences = !state.main.absences.absences.is_empty();
     let list_lines = visible
         .iter()
         .enumerate()
@@ -243,7 +302,11 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
             } else {
                 None
             };
-            let status = if absence.is_excused { "EXCUSED" } else { "UNEXCUSED" };
+            let status = if absence.is_excused {
+                "EXCUSED"
+            } else {
+                "UNEXCUSED"
+            };
             Line::from(vec![
                 styled_cell(
                     if selected { "> " } else { "  " },
@@ -265,24 +328,60 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
                 ),
                 styled_cell(" ", bg, None),
                 styled_cell(
-                    &fit_text(if absence.text.is_empty() { &absence.reason } else { &absence.text }, 28),
+                    &fit_text(
+                        if absence.text.is_empty() {
+                            &absence.reason
+                        } else {
+                            &absence.text
+                        },
+                        28,
+                    ),
                     bg,
                     Some(Color::White),
                 ),
                 styled_cell(" ", bg, None),
-                styled_cell(status, Some(if absence.is_excused { Color::Green } else { Color::Red }), Some(Color::White)),
+                styled_cell(
+                    status,
+                    Some(if absence.is_excused {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    }),
+                    Some(Color::White),
+                ),
             ])
         })
         .collect::<Vec<_>>();
-    frame.render_widget(
-        Paragraph::new(if list_lines.is_empty() {
-            vec![Line::from("No absences match current filters.")]
+    let selected_count = if filtered.is_empty() {
+        0
+    } else {
+        filtered.len().min(state.main.absences.selected_idx + 1)
+    };
+    let history_lines = if state.main.absences.loading_initial {
+        vec![Line::from(Span::styled(
+            "Loading absences...",
+            Style::default().fg(WARNING),
+        ))]
+    } else if !state.main.absences.error.is_empty() && !has_loaded_absences {
+        vec![Line::from(Span::styled(
+            state.main.absences.error.clone(),
+            Style::default().fg(ERROR),
+        ))]
+    } else if filtered.is_empty() && !has_loaded_absences {
+        vec![Line::from("No absences found in loaded history.")]
+    } else if filtered.is_empty() {
+        vec![Line::from(if has_active_filters {
+            "No absences match current filters."
         } else {
-            list_lines
-        })
-        .block(Block::default().borders(Borders::ALL).title(format!(
+            "No absences found in loaded history."
+        })]
+    } else {
+        list_lines
+    };
+    frame.render_widget(
+        Paragraph::new(history_lines).block(Block::default().borders(Borders::ALL).title(format!(
             "History {}/{}",
-            filtered.len().min(state.main.absences.selected_idx + 1),
+            selected_count,
             filtered.len()
         ))),
         body[0],
@@ -298,14 +397,29 @@ fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
                 crate::models::format_date(absence.end_date),
                 absence.end_time
             )),
-            Line::from(format!("Reason: {}", if absence.reason.is_empty() { "No reason" } else { &absence.reason })),
+            Line::from(format!(
+                "Reason: {}",
+                if absence.reason.is_empty() {
+                    "No reason"
+                } else {
+                    &absence.reason
+                }
+            )),
             Line::from(format!(
                 "Status: {}",
-                if absence.is_excused { "Excused" } else { "Unexcused" }
+                if absence.is_excused {
+                    "Excused"
+                } else {
+                    "Unexcused"
+                }
             )),
             Line::from(format!(
                 "Notes: {}",
-                if absence.text.is_empty() { "No additional notes" } else { &absence.text }
+                if absence.text.is_empty() {
+                    "No additional notes"
+                } else {
+                    &absence.text
+                }
             )),
         ]
     } else {
@@ -342,7 +456,11 @@ fn render_shortcuts_modal(frame: &mut Frame, state: &AppState, area: Rect) {
             Style::default().add_modifier(Modifier::BOLD),
         )));
         for item in section.items {
-            lines.push(Line::from(format!("{} - {}", fit_text(item.keys, 18), item.action)));
+            lines.push(Line::from(format!(
+                "{} - {}",
+                fit_text(item.keys, 18),
+                item.action
+            )));
         }
         lines.push(Line::from(""));
     }
@@ -371,14 +489,22 @@ fn render_timetable_search_popup(frame: &mut Frame, state: &AppState, area: Rect
         Line::from(if state.main.timetable.search_index_loading {
             "Loading timetable targets...".to_owned()
         } else if !state.main.timetable.search_index_error.is_empty() {
-            format!("Target load failed: {}", state.main.timetable.search_index_error)
+            format!(
+                "Target load failed: {}",
+                state.main.timetable.search_index_error
+            )
         } else {
             "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
         }),
         Line::from(""),
     ];
 
-    for (index, result) in state.timetable_search_results().into_iter().take(12).enumerate() {
+    for (index, result) in state
+        .timetable_search_results()
+        .into_iter()
+        .take(12)
+        .enumerate()
+    {
         let selected = index == state.main.timetable.search_selected_idx;
         lines.push(Line::from(vec![
             Span::styled(
@@ -416,7 +542,10 @@ fn build_timetable_lines(state: &AppState) -> Vec<Line<'static>> {
     let time_width = 13usize;
     let day_width = (((state.terminal_width as usize).saturating_sub(time_width + 6)) / 5).max(8);
     let mut lines = Vec::new();
-    let mut header = vec![Span::styled(fit_text("Time", time_width), Style::default().fg(Color::Gray))];
+    let mut header = vec![Span::styled(
+        fit_text("Time", time_width),
+        Style::default().fg(Color::Gray),
+    )];
     for day in &data.days {
         header.push(Span::raw(" "));
         header.push(Span::styled(
@@ -428,7 +557,10 @@ fn build_timetable_lines(state: &AppState) -> Vec<Line<'static>> {
 
     for (period_idx, period) in data.timegrid.iter().enumerate() {
         let mut spans = vec![Span::styled(
-            fit_text(&format!("{} {}", period.name, period.start_time), time_width),
+            fit_text(
+                &format!("{} {}", period.name, period.start_time),
+                time_width,
+            ),
             Style::default().fg(if state.main.timetable.selected_period_idx == period_idx {
                 BRAND
             } else {
@@ -488,7 +620,11 @@ fn build_timetable_details(state: &AppState) -> Vec<Line<'static>> {
             )),
             Line::from(format!(
                 "Room / Classes: {} / {}",
-                if lesson.room.is_empty() { "N/A" } else { &lesson.room },
+                if lesson.room.is_empty() {
+                    "N/A"
+                } else {
+                    &lesson.room
+                },
                 if lesson.all_classes.is_empty() {
                     "N/A".to_owned()
                 } else {
@@ -536,7 +672,11 @@ fn login_field_line(
             format!("{}{}: ", if focused { "> " } else { "  " }, label),
             Style::default()
                 .fg(if focused { BRAND } else { Color::Gray })
-                .add_modifier(if focused { Modifier::BOLD } else { Modifier::empty() }),
+                .add_modifier(if focused {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
         ),
         Span::raw(rendered),
     ])
@@ -548,7 +688,11 @@ fn tab_span(label: &str, active: bool) -> Span<'static> {
         Style::default()
             .fg(if active { Color::Black } else { Color::White })
             .bg(if active { BRAND } else { Color::DarkGray })
-            .add_modifier(if active { Modifier::BOLD } else { Modifier::empty() }),
+            .add_modifier(if active {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            }),
     )
 }
 
@@ -585,7 +729,10 @@ fn fit_text(value: &str, width: usize) -> String {
     }
     let mut result = String::new();
     for character in value.chars() {
-        if UnicodeWidthStr::width(result.as_str()) + UnicodeWidthStr::width(character.encode_utf8(&mut [0; 4])) > width.saturating_sub(1) {
+        if UnicodeWidthStr::width(result.as_str())
+            + UnicodeWidthStr::width(character.encode_utf8(&mut [0; 4]))
+            > width.saturating_sub(1)
+        {
             break;
         }
         result.push(character);
@@ -667,5 +814,129 @@ mod tests {
         let output = buffer_text(terminal.backend().buffer());
         assert!(output.contains("Timetable"));
         assert!(output.contains("Absences"));
+    }
+
+    #[test]
+    fn render_timetable_uses_shared_header_without_extra_timetable_block() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert_eq!(output.matches("Timetable").count(), 1);
+    }
+
+    #[test]
+    fn render_absences_uses_shared_header_without_extra_absences_block() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert_eq!(output.matches("Absences").count(), 1);
+        assert!(output.contains("Absence Timeline"));
+    }
+
+    #[test]
+    fn render_absences_shows_loading_state() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        state.main.absences.loading_initial = true;
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert!(output.contains("Loading absences..."));
+    }
+
+    #[test]
+    fn render_absences_shows_backend_error_when_history_is_empty() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        state.main.absences.loading_initial = false;
+        state.main.absences.error = "Failed to fetch absences".into();
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert!(output.contains("Failed to fetch absences"));
+    }
+
+    #[test]
+    fn render_absences_shows_neutral_empty_message_without_filters() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        state.main.absences.loading_initial = false;
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert!(output.contains("No absences found in loaded history."));
+    }
+
+    #[test]
+    fn render_absences_shows_filter_empty_message_when_records_are_filtered_out() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        state.main.absences.loading_initial = false;
+        state.main.absences.search_query = "zzz".into();
+        state
+            .main
+            .absences
+            .absences
+            .push(crate::models::ParsedAbsence {
+                id: 1,
+                student_name: "User".into(),
+                reason: "Ill".into(),
+                text: String::new(),
+                excuse_status: "Open".into(),
+                is_excused: false,
+                start_date: chrono::Local::now().date_naive(),
+                end_date: chrono::Local::now().date_naive(),
+                start_time: "08:00".into(),
+                end_time: "08:50".into(),
+            });
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert!(output.contains("No absences match current filters."));
+    }
+
+    #[test]
+    fn render_absences_shows_history_and_details_when_records_exist() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::MainShell;
+        state.main.active_tab = TabId::Absences;
+        state.main.absences.loading_initial = false;
+        state
+            .main
+            .absences
+            .absences
+            .push(crate::models::ParsedAbsence {
+                id: 1,
+                student_name: "User".into(),
+                reason: "Ill".into(),
+                text: "Doctor".into(),
+                excuse_status: "Excused".into(),
+                is_excused: true,
+                start_date: chrono::Local::now().date_naive(),
+                end_date: chrono::Local::now().date_naive(),
+                start_time: "08:00".into(),
+                end_time: "08:50".into(),
+            });
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+        let output = buffer_text(terminal.backend().buffer());
+        assert!(output.contains("History 1/1"));
+        assert!(output.contains("Reason: Ill"));
     }
 }

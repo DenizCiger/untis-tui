@@ -256,10 +256,7 @@ pub fn format_date(date: NaiveDate) -> String {
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
-    let month = MONTHS
-        .get(date.month0() as usize)
-        .copied()
-        .unwrap_or("???");
+    let month = MONTHS.get(date.month0() as usize).copied().unwrap_or("???");
     format!("{month} {}, {}", date.day(), date.year())
 }
 
@@ -287,7 +284,10 @@ pub fn compare_absence_newest_first(
         .then_with(|| right.id.cmp(&left.id))
 }
 
-pub fn merge_absences(previous: &[ParsedAbsence], incoming: &[ParsedAbsence]) -> Vec<ParsedAbsence> {
+pub fn merge_absences(
+    previous: &[ParsedAbsence],
+    incoming: &[ParsedAbsence],
+) -> Vec<ParsedAbsence> {
     let mut by_id = HashMap::<i64, ParsedAbsence>::new();
     for absence in previous.iter().chain(incoming.iter()) {
         by_id.insert(absence.id, absence.clone());
@@ -387,7 +387,10 @@ mod tests {
 
     #[test]
     fn timetable_target_helpers_format_labels() {
-        assert_eq!(format_timetable_target_label(Some(&TimetableTarget::Own)), "My timetable");
+        assert_eq!(
+            format_timetable_target_label(Some(&TimetableTarget::Own)),
+            "My timetable"
+        );
         assert_eq!(
             format_timetable_target_label(Some(&TimetableTarget::Teacher {
                 id: 99,

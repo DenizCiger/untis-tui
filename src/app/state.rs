@@ -1,7 +1,7 @@
 use crate::models::{
     Config, ParsedAbsence, SavedConfig, TimetableSearchItem, TimetableTarget, WeekTimetable,
-    add_days, build_profile_key, format_timetable_target_label,
-    get_default_timetable_target, target_to_cache_key, today_local,
+    add_days, build_profile_key, format_timetable_target_label, get_default_timetable_target,
+    target_to_cache_key, today_local,
 };
 use crate::shortcuts::{TabId, is_shortcut_pressed};
 use crate::storage::cache::{clear_cache, get_cached_week, save_week_to_cache};
@@ -325,9 +325,10 @@ impl AppState {
                 target,
                 result,
             } => self.handle_timetable_loaded(request_id, week_date, target, result),
-            WorkerEvent::SearchIndexLoaded { profile_key, result } => {
-                self.handle_search_index_loaded(&profile_key, result)
-            }
+            WorkerEvent::SearchIndexLoaded {
+                profile_key,
+                result,
+            } => self.handle_search_index_loaded(&profile_key, result),
             WorkerEvent::AbsencesLoaded {
                 generation,
                 is_initial,
@@ -370,16 +371,16 @@ impl AppState {
                 self.screen = Screen::MainShell;
 
                 if let Err(error) = save_config(&config) {
-                    self.app_error =
-                        format!("Login succeeded, but profile settings could not be saved to disk: {error}");
+                    self.app_error = format!(
+                        "Login succeeded, but profile settings could not be saved to disk: {error}"
+                    );
                 } else {
                     self.app_error.clear();
                 }
 
                 if let Err(error) = save_password(&config.saved(), &config.password) {
-                    self.app_error = format!(
-                        "Login succeeded, but secure password storage failed: {error}"
-                    );
+                    self.app_error =
+                        format!("Login succeeded, but secure password storage failed: {error}");
                 }
 
                 self.enter_main_shell()
@@ -471,6 +472,7 @@ impl AppState {
                     .absences
                     .selected_idx
                     .min(self.main.absences.absences.len().saturating_sub(1));
+                return self.maybe_request_more_absences();
             }
             Err(error) => self.main.absences.error = error,
         }
@@ -647,7 +649,8 @@ impl AppState {
     fn handle_timetable_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
         if is_shortcut_pressed("timetable-search", key) {
             self.main.timetable.search_open = true;
-            if self.main.timetable.search_index.is_empty() && !self.main.timetable.search_index_loading
+            if self.main.timetable.search_index.is_empty()
+                && !self.main.timetable.search_index_loading
             {
                 return self.request_search_index();
             }
@@ -678,18 +681,21 @@ impl AppState {
         }
 
         if is_shortcut_pressed("timetable-day-prev", key) {
-            self.main.timetable.selected_day_idx = self.main.timetable.selected_day_idx.saturating_sub(1);
+            self.main.timetable.selected_day_idx =
+                self.main.timetable.selected_day_idx.saturating_sub(1);
             self.ensure_timetable_selection_bounds();
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-day-next", key) {
-            self.main.timetable.selected_day_idx = (self.main.timetable.selected_day_idx + 1).min(4);
+            self.main.timetable.selected_day_idx =
+                (self.main.timetable.selected_day_idx + 1).min(4);
             self.ensure_timetable_selection_bounds();
             return Vec::new();
         }
 
-        if is_shortcut_pressed("timetable-up", key) || is_shortcut_pressed("timetable-up-step", key) {
+        if is_shortcut_pressed("timetable-up", key) || is_shortcut_pressed("timetable-up-step", key)
+        {
             self.move_timetable_selection(-1, !is_shortcut_pressed("timetable-up-step", key));
             return Vec::new();
         }
@@ -736,8 +742,11 @@ impl AppState {
 
         if is_shortcut_pressed("timetable-today", key) {
             self.main.timetable.week_offset = 0;
-            self.main.timetable.selected_day_idx =
-                (today_local().weekday().number_from_monday().saturating_sub(1) as usize).min(4);
+            self.main.timetable.selected_day_idx = (today_local()
+                .weekday()
+                .number_from_monday()
+                .saturating_sub(1) as usize)
+                .min(4);
             self.main.timetable.selected_lesson_idx = 0;
             return self.request_timetable(false);
         }
@@ -779,13 +788,11 @@ impl AppState {
                         name: selected.name.clone(),
                         long_name: selected.long_name.clone(),
                     },
-                    crate::models::TimetableSearchTargetType::Teacher => {
-                        TimetableTarget::Teacher {
-                            id: selected.id,
-                            name: selected.name.clone(),
-                            long_name: selected.long_name.clone(),
-                        }
-                    }
+                    crate::models::TimetableSearchTargetType::Teacher => TimetableTarget::Teacher {
+                        id: selected.id,
+                        name: selected.name.clone(),
+                        long_name: selected.long_name.clone(),
+                    },
                 };
                 self.main.timetable.search_open = false;
                 self.persist_profile_session();
@@ -880,11 +887,13 @@ impl AppState {
     fn handle_absence_search_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
         if key.code == KeyCode::Esc {
             self.main.absences.search_open = false;
-            self.main.absences.search_input = TextInputState::from(self.main.absences.search_query.clone());
+            self.main.absences.search_input =
+                TextInputState::from(self.main.absences.search_query.clone());
             return Vec::new();
         }
         if key.code == KeyCode::Enter {
-            self.main.absences.search_query = self.main.absences.search_input.value.trim().to_owned();
+            self.main.absences.search_query =
+                self.main.absences.search_input.value.trim().to_owned();
             self.main.absences.search_open = false;
             self.main.absences.selected_idx = 0;
             return self.maybe_request_more_absences();
@@ -930,14 +939,14 @@ impl AppState {
             None => return Vec::new(),
         };
         let profile_key = build_profile_key(&saved);
-        let session = self
-            .profile_sessions
-            .get(&profile_key)
-            .cloned()
-            .unwrap_or(ProfileSessionState {
-                active_target: get_default_timetable_target(),
-                search_index: Vec::new(),
-            });
+        let session =
+            self.profile_sessions
+                .get(&profile_key)
+                .cloned()
+                .unwrap_or(ProfileSessionState {
+                    active_target: get_default_timetable_target(),
+                    search_index: Vec::new(),
+                });
 
         self.main = MainState::default();
         self.main.timetable.active_target = session.active_target;
@@ -956,7 +965,10 @@ impl AppState {
         let profile_key = build_profile_key(&config.saved());
         self.main.timetable.search_index_loading = true;
         self.main.timetable.search_index_error.clear();
-        vec![AppCommand::LoadSearchIndex { profile_key, config }]
+        vec![AppCommand::LoadSearchIndex {
+            profile_key,
+            config,
+        }]
     }
 
     fn request_timetable(&mut self, force_refresh: bool) -> Vec<AppCommand> {
@@ -965,7 +977,10 @@ impl AppState {
             None => return Vec::new(),
         };
 
-        let week_date = add_days(today_local(), i64::from(self.main.timetable.week_offset) * 7);
+        let week_date = add_days(
+            today_local(),
+            i64::from(self.main.timetable.week_offset) * 7,
+        );
         let target = self.main.timetable.active_target.clone();
         let request_id = self.next_request_id;
         self.next_request_id += 1;
@@ -974,8 +989,7 @@ impl AppState {
         let monday = crate::models::get_monday(week_date);
         let monday_key = crate::models::format_web_date(monday);
         if !force_refresh {
-            if let Some(cached) =
-                get_cached_week(&monday_key, &target_to_cache_key(Some(&target)))
+            if let Some(cached) = get_cached_week(&monday_key, &target_to_cache_key(Some(&target)))
             {
                 self.main.timetable.data = Some(cached);
                 self.main.timetable.loading = false;
@@ -1063,7 +1077,8 @@ impl AppState {
         }
 
         if maintain_prefetch
-            && filtered_len <= self.main.absences.selected_idx + self.absences_page_jump() + prefetch_threshold
+            && filtered_len
+                <= self.main.absences.selected_idx + self.absences_page_jump() + prefetch_threshold
         {
             return self.request_absences_more();
         }
@@ -1124,7 +1139,11 @@ impl AppState {
 
     fn ensure_timetable_selection_bounds(&mut self) {
         let count = self.current_timetable_period_lessons().len();
-        self.main.timetable.selected_lesson_idx = self.main.timetable.selected_lesson_idx.min(count.saturating_sub(1));
+        self.main.timetable.selected_lesson_idx = self
+            .main
+            .timetable
+            .selected_lesson_idx
+            .min(count.saturating_sub(1));
     }
 
     fn move_timetable_selection(&mut self, delta: isize, jump_to_lesson: bool) {
@@ -1165,14 +1184,18 @@ impl AppState {
         };
         if from_start {
             for index in 0..data.timegrid.len() {
-                if !lessons_for_period(Some(data), self.main.timetable.selected_day_idx, index).is_empty() {
+                if !lessons_for_period(Some(data), self.main.timetable.selected_day_idx, index)
+                    .is_empty()
+                {
                     return index;
                 }
             }
             0
         } else {
             for index in (0..data.timegrid.len()).rev() {
-                if !lessons_for_period(Some(data), self.main.timetable.selected_day_idx, index).is_empty() {
+                if !lessons_for_period(Some(data), self.main.timetable.selected_day_idx, index)
+                    .is_empty()
+                {
                     return index;
                 }
             }
@@ -1212,6 +1235,12 @@ impl AppState {
             })
             .cloned()
             .collect()
+    }
+
+    pub fn has_active_absence_filters(&self) -> bool {
+        self.main.absences.status_filter != StatusFilter::All
+            || self.main.absences.window_filter != WindowFilter::All
+            || !self.main.absences.search_query.trim().is_empty()
     }
 
     pub fn timetable_search_results(&self) -> Vec<TimetableSearchItem> {
@@ -1360,7 +1389,11 @@ pub fn build_absence_chunk_request(
     chunk_index: usize,
     is_initial: bool,
 ) -> Vec<(NaiveDate, NaiveDate)> {
-    let chunks = if is_initial { 1 } else { LOAD_MORE_BURST_CHUNKS };
+    let chunks = if is_initial {
+        1
+    } else {
+        LOAD_MORE_BURST_CHUNKS
+    };
     (0..chunks)
         .map(|offset| chunk_range(base_date, chunk_index + offset))
         .collect()
@@ -1387,7 +1420,12 @@ pub fn update_absence_chunk_progress(
     let reached_empty_streak = next_empty_chunk_streak >= MAX_EMPTY_CHUNK_STREAK;
     let has_more = !reached_max_history && !reached_empty_streak;
     let days_loaded = next_chunk_index * CHUNK_DAYS;
-    (next_chunk_index, next_empty_chunk_streak, has_more, days_loaded)
+    (
+        next_chunk_index,
+        next_empty_chunk_streak,
+        has_more,
+        days_loaded,
+    )
 }
 
 fn lessons_for_period(
@@ -1454,8 +1492,16 @@ mod tests {
 
         assert_eq!(state.screen, Screen::MainShell);
         assert!(state.config.is_some());
-        assert!(commands.iter().any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. })));
-        assert!(commands.iter().any(|command| matches!(command, AppCommand::LoadAbsenceChunk { .. })));
+        assert!(
+            commands
+                .iter()
+                .any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| matches!(command, AppCommand::LoadAbsenceChunk { .. }))
+        );
     }
 
     #[test]
@@ -1481,6 +1527,39 @@ mod tests {
             has_more = next.2;
         }
         assert!(!has_more);
+    }
+
+    #[test]
+    fn initial_empty_absence_chunk_triggers_background_prefetch() {
+        let mut state = AppState::new();
+        state.config = Some(sample_config());
+        state.main.absences.generation = 1;
+        state.main.absences.loading_initial = true;
+        state.main.absences.has_more = true;
+
+        let commands = state.handle_worker_event(WorkerEvent::AbsencesLoaded {
+            generation: 1,
+            is_initial: true,
+            result: Ok(AbsenceChunkPayload {
+                items: Vec::new(),
+                next_chunk_index: 1,
+                empty_chunk_streak: 1,
+                has_more: true,
+                days_loaded: 45,
+            }),
+        });
+
+        assert!(commands.iter().any(|command| matches!(
+            command,
+            AppCommand::LoadAbsenceChunk {
+                generation: 1,
+                chunk_index: 1,
+                is_initial: false,
+                ..
+            }
+        )));
+        assert!(state.main.absences.loading_more);
+        assert!(!state.main.absences.loading_initial);
     }
 
     #[test]
@@ -1511,17 +1590,54 @@ mod tests {
                         remarks: String::new(),
                     }],
                 },
-                crate::models::DayTimetable { date: today_local(), day_name: "Tuesday".into(), lessons: Vec::new() },
-                crate::models::DayTimetable { date: today_local(), day_name: "Wednesday".into(), lessons: Vec::new() },
-                crate::models::DayTimetable { date: today_local(), day_name: "Thursday".into(), lessons: Vec::new() },
-                crate::models::DayTimetable { date: today_local(), day_name: "Friday".into(), lessons: Vec::new() },
+                crate::models::DayTimetable {
+                    date: today_local(),
+                    day_name: "Tuesday".into(),
+                    lessons: Vec::new(),
+                },
+                crate::models::DayTimetable {
+                    date: today_local(),
+                    day_name: "Wednesday".into(),
+                    lessons: Vec::new(),
+                },
+                crate::models::DayTimetable {
+                    date: today_local(),
+                    day_name: "Thursday".into(),
+                    lessons: Vec::new(),
+                },
+                crate::models::DayTimetable {
+                    date: today_local(),
+                    day_name: "Friday".into(),
+                    lessons: Vec::new(),
+                },
             ],
             timegrid: vec![
-                TimeUnit { name: "1".into(), start_time: "08:00".into(), end_time: "08:50".into() },
-                TimeUnit { name: "2".into(), start_time: "08:50".into(), end_time: "09:40".into() },
+                TimeUnit {
+                    name: "1".into(),
+                    start_time: "08:00".into(),
+                    end_time: "08:50".into(),
+                },
+                TimeUnit {
+                    name: "2".into(),
+                    start_time: "08:50".into(),
+                    end_time: "09:40".into(),
+                },
             ],
         });
         assert_eq!(state.timetable_lessons_for(0, 0).len(), 1);
         assert_eq!(state.timetable_lessons_for(0, 1).len(), 1);
+    }
+
+    #[test]
+    fn absence_filter_helper_tracks_non_default_filters() {
+        let mut state = AppState::new();
+        assert!(!state.has_active_absence_filters());
+
+        state.main.absences.search_query = "math".into();
+        assert!(state.has_active_absence_filters());
+
+        state.main.absences.search_query.clear();
+        state.main.absences.window_filter = WindowFilter::D30;
+        assert!(state.has_active_absence_filters());
     }
 }
