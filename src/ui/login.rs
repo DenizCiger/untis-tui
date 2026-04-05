@@ -53,7 +53,10 @@ pub(super) fn render_login(frame: &mut Frame, state: &AppState) {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("Saved account: ", Style::default().fg(BRAND)),
-            Span::raw(format!("{}@{} ({})", saved.username, saved.school, saved.server)),
+            Span::raw(format!(
+                "{}@{} ({})",
+                saved.username, saved.school, saved.server
+            )),
             Span::raw(" | Ctrl+l login"),
         ]));
     }

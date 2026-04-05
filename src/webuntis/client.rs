@@ -75,7 +75,9 @@ impl WebUntisClient {
                 crate::webuntis::search::map_classes_to_search_items(&classes)
                     .into_iter()
                     .chain(crate::webuntis::search::map_rooms_to_search_items(&rooms))
-                    .chain(crate::webuntis::search::map_teachers_to_search_items(&teachers))
+                    .chain(crate::webuntis::search::map_teachers_to_search_items(
+                        &teachers,
+                    ))
                     .collect(),
             ))
         }
@@ -119,8 +121,12 @@ impl WebUntisClient {
         let client = Self::new(config)?;
         let session = client.login().await?;
         let result = async {
-            let payload = client.get_absences(&session, range_start, range_end).await?;
-            Ok(crate::webuntis::absences::map_absence_payload(config, payload))
+            let payload = client
+                .get_absences(&session, range_start, range_end)
+                .await?;
+            Ok(crate::webuntis::absences::map_absence_payload(
+                config, payload,
+            ))
         }
         .await;
         let _ = client.logout(&session).await;

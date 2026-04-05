@@ -1,6 +1,7 @@
 use super::{AppCommand, AppState, LoginField, TextInputState};
 use crate::models::{TimetableTarget, today_local};
 use crate::shortcuts::{TabId, is_shortcut_pressed};
+use crate::timetable_model::find_next_lesson_period_index;
 use chrono::Datelike;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -163,6 +164,7 @@ impl AppState {
             self.main.timetable.week_offset -= 1;
             self.main.timetable.selected_period_idx = 0;
             self.main.timetable.selected_lesson_idx = 0;
+            self.main.timetable.scroll_offset = 0;
             return self.request_timetable(false);
         }
 
@@ -170,6 +172,7 @@ impl AppState {
             self.main.timetable.week_offset += 1;
             self.main.timetable.selected_period_idx = 0;
             self.main.timetable.selected_lesson_idx = 0;
+            self.main.timetable.scroll_offset = 0;
             return self.request_timetable(false);
         }
 
@@ -177,12 +180,15 @@ impl AppState {
             self.main.timetable.selected_day_idx =
                 self.main.timetable.selected_day_idx.saturating_sub(1);
             self.ensure_timetable_selection_bounds();
+            self.sync_timetable_scroll();
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-day-next", key) {
-            self.main.timetable.selected_day_idx = (self.main.timetable.selected_day_idx + 1).min(4);
+            self.main.timetable.selected_day_idx =
+                (self.main.timetable.selected_day_idx + 1).min(4);
             self.ensure_timetable_selection_bounds();
+            self.sync_timetable_scroll();
             return Vec::new();
         }
 
@@ -200,35 +206,67 @@ impl AppState {
         }
 
         if is_shortcut_pressed("timetable-page-up", key) {
-            let jump = self.timetable_rows_per_page().max(1) as isize - 1;
-            self.move_timetable_selection(-jump, true);
+            let Some(data) = self.main.timetable.data.as_ref() else {
+                return Vec::new();
+            };
+            let Some(model) = self.timetable_render_model() else {
+                return Vec::new();
+            };
+            let target_period_idx = self
+                .main
+                .timetable
+                .selected_period_idx
+                .saturating_sub(self.timetable_rows_per_page().max(1).saturating_sub(1));
+            let next_period_idx = find_next_lesson_period_index(
+                &model,
+                data,
+                self.main.timetable.selected_day_idx,
+                target_period_idx.saturating_add(1),
+                -1,
+            )
+            .unwrap_or(target_period_idx);
+            self.align_timetable_selection_to_period(next_period_idx);
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-page-down", key) {
-            let jump = self.timetable_rows_per_page().max(1) as isize - 1;
-            self.move_timetable_selection(jump, true);
+            let Some(data) = self.main.timetable.data.as_ref() else {
+                return Vec::new();
+            };
+            let Some(model) = self.timetable_render_model() else {
+                return Vec::new();
+            };
+            let max_period = data.timegrid.len().saturating_sub(1);
+            let target_period_idx = (self.main.timetable.selected_period_idx
+                + self.timetable_rows_per_page().max(1).saturating_sub(1))
+            .min(max_period);
+            let search_from = target_period_idx.saturating_sub(1);
+            let next_period_idx = find_next_lesson_period_index(
+                &model,
+                data,
+                self.main.timetable.selected_day_idx,
+                search_from,
+                1,
+            )
+            .unwrap_or(target_period_idx);
+            self.align_timetable_selection_to_period(next_period_idx);
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-home", key) {
-            self.main.timetable.selected_period_idx = self.find_timetable_edge_period(true);
-            self.ensure_timetable_selection_bounds();
+            let next_period_idx = self.find_timetable_edge_period(true);
+            self.align_timetable_selection_to_period(next_period_idx);
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-end", key) {
-            self.main.timetable.selected_period_idx = self.find_timetable_edge_period(false);
-            self.ensure_timetable_selection_bounds();
+            let next_period_idx = self.find_timetable_edge_period(false);
+            self.align_timetable_selection_to_period(next_period_idx);
             return Vec::new();
         }
 
         if is_shortcut_pressed("timetable-cycle-overlap", key) {
-            let count = self.current_timetable_period_lessons().len();
-            if count > 1 {
-                self.main.timetable.selected_lesson_idx =
-                    (self.main.timetable.selected_lesson_idx + 1) % count;
-            }
+            self.cycle_timetable_overlap();
             return Vec::new();
         }
 
@@ -240,6 +278,7 @@ impl AppState {
                 .saturating_sub(1) as usize)
                 .min(4);
             self.main.timetable.selected_lesson_idx = 0;
+            self.main.timetable.scroll_offset = 0;
             return self.request_timetable(false);
         }
 
@@ -280,13 +319,11 @@ impl AppState {
                         name: selected.name.clone(),
                         long_name: selected.long_name.clone(),
                     },
-                    crate::models::TimetableSearchTargetType::Teacher => {
-                        TimetableTarget::Teacher {
-                            id: selected.id,
-                            name: selected.name.clone(),
-                            long_name: selected.long_name.clone(),
-                        }
-                    }
+                    crate::models::TimetableSearchTargetType::Teacher => TimetableTarget::Teacher {
+                        id: selected.id,
+                        name: selected.name.clone(),
+                        long_name: selected.long_name.clone(),
+                    },
                 };
                 self.main.timetable.search_open = false;
                 self.persist_profile_session();

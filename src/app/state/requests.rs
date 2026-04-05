@@ -4,6 +4,7 @@ use crate::models::{
     today_local,
 };
 use crate::storage::cache::{clear_cache, get_cached_week};
+use crate::timetable_model::{timetable_body_height_from_terminal, timetable_rows_per_page};
 
 impl AppState {
     pub(super) fn submit_login(&mut self) -> Vec<AppCommand> {
@@ -34,19 +35,18 @@ impl AppState {
             None => return Vec::new(),
         };
         let profile_key = build_profile_key(&saved);
-        let session = self
-            .profile_sessions
-            .get(&profile_key)
-            .cloned()
-            .unwrap_or(super::types::ProfileSessionState {
+        let session = self.profile_sessions.get(&profile_key).cloned().unwrap_or(
+            super::types::ProfileSessionState {
                 active_target: get_default_timetable_target(),
                 search_index: Vec::new(),
-            });
+            },
+        );
 
         self.main = super::MainState::default();
         self.main.timetable.active_target = session.active_target;
         self.main.timetable.search_index = session.search_index;
         self.main.absences.base_date = today_local();
+        self.sync_timetable_scroll();
         let mut commands = self.request_timetable(false);
         commands.extend(self.request_absences_refresh());
         commands
@@ -90,6 +90,7 @@ impl AppState {
                 self.main.timetable.loading = false;
                 self.main.timetable.is_from_cache = true;
                 self.main.timetable.error.clear();
+                self.sync_timetable_scroll();
                 return vec![AppCommand::LoadTimetableNetwork {
                     request_id,
                     config,
@@ -216,8 +217,7 @@ impl AppState {
     }
 
     pub(super) fn timetable_rows_per_page(&self) -> usize {
-        let height = self.terminal_height.saturating_sub(10);
-        usize::from(height.max(1))
+        timetable_rows_per_page(timetable_body_height_from_terminal(self.terminal_height))
     }
 
     pub(super) fn absences_page_jump(&self) -> usize {

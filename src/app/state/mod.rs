@@ -8,14 +8,15 @@ mod text_input;
 mod types;
 mod worker;
 
-use crate::models::{Config, WeekTimetable, add_days, format_timetable_target_label};
+use crate::models::{Config, add_days, format_timetable_target_label};
 use crate::storage::config::load_config;
 use crate::storage::secret::{get_secure_storage_diagnostic, load_password};
+use crate::timetable_model::{TimetableRenderModel, build_render_model};
 use chrono::NaiveDate;
 
 pub use types::{
-    AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, LoginField, LoginState,
-    MainState, Screen, StatusFilter, TextInputState, TimetableState, WindowFilter, WorkerEvent,
+    AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, LoginField, LoginState, MainState,
+    Screen, StatusFilter, TextInputState, TimetableState, WindowFilter, WorkerEvent,
 };
 
 const CHUNK_DAYS: usize = 45;
@@ -35,6 +36,7 @@ impl AppState {
     pub fn update_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_width = width;
         self.terminal_height = height;
+        self.sync_timetable_scroll();
     }
 
     pub fn saved_login_config(&self) -> Option<Config> {
@@ -71,6 +73,49 @@ impl AppState {
         self.login.school.cursor = self.login.school.value.len();
         self.login.username.cursor = self.login.username.value.len();
         self.login.password.cursor = 0;
+    }
+
+    pub(super) fn timetable_render_model(&self) -> Option<TimetableRenderModel> {
+        self.main
+            .timetable
+            .data
+            .as_ref()
+            .map(|data| build_render_model(data, 2))
+    }
+
+    pub(super) fn sync_timetable_scroll(&mut self) {
+        let max_period = self
+            .main
+            .timetable
+            .data
+            .as_ref()
+            .map(|data| data.timegrid.len().saturating_sub(1))
+            .unwrap_or(0);
+        self.main.timetable.selected_period_idx =
+            self.main.timetable.selected_period_idx.min(max_period);
+        self.ensure_timetable_selection_bounds();
+
+        let rows_per_page = self.timetable_rows_per_page().max(1);
+        let max_scroll = self
+            .main
+            .timetable
+            .data
+            .as_ref()
+            .map(|data| data.timegrid.len().saturating_sub(rows_per_page))
+            .unwrap_or(0);
+        self.main.timetable.scroll_offset = self.main.timetable.scroll_offset.min(max_scroll);
+
+        if self.main.timetable.selected_period_idx < self.main.timetable.scroll_offset {
+            self.main.timetable.scroll_offset = self.main.timetable.selected_period_idx;
+        } else if self.main.timetable.selected_period_idx
+            >= self.main.timetable.scroll_offset + rows_per_page
+        {
+            self.main.timetable.scroll_offset = self
+                .main
+                .timetable
+                .selected_period_idx
+                .saturating_sub(rows_per_page - 1);
+        }
     }
 }
 
@@ -133,43 +178,4 @@ pub fn update_absence_chunk_progress(
         has_more,
         days_loaded,
     )
-}
-
-fn lessons_for_period(
-    data: Option<&WeekTimetable>,
-    day_idx: usize,
-    period_idx: usize,
-) -> Vec<crate::models::ParsedLesson> {
-    let Some(data) = data else {
-        return Vec::new();
-    };
-    let Some(day) = data.days.get(day_idx) else {
-        return Vec::new();
-    };
-    let Some(period) = data.timegrid.get(period_idx) else {
-        return Vec::new();
-    };
-
-    let period_start = crate::models::parse_time_to_minutes(&period.start_time);
-    let period_end = crate::models::parse_time_to_minutes(&period.end_time);
-    let mut lessons = day
-        .lessons
-        .iter()
-        .filter(|lesson| {
-            let lesson_start = crate::models::parse_time_to_minutes(&lesson.start_time);
-            let lesson_end = crate::models::parse_time_to_minutes(&lesson.end_time);
-            lesson_start < period_end && lesson_end > period_start
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    lessons.sort_by(|left, right| {
-        left.start_time
-            .cmp(&right.start_time)
-            .then_with(|| left.end_time.cmp(&right.end_time))
-            .then_with(|| left.subject.cmp(&right.subject))
-            .then_with(|| left.teacher.cmp(&right.teacher))
-            .then_with(|| left.room.cmp(&right.room))
-            .then_with(|| left.instance_id.cmp(&right.instance_id))
-    });
-    lessons
 }

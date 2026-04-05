@@ -1,15 +1,11 @@
 use super::auth::UntisSession;
-use super::client::{ WebUntisClient, WebUntisError };
+use super::client::{WebUntisClient, WebUntisError};
 use crate::models::{
-    Config,
-    ParsedAbsence,
-    format_untis_date,
-    format_untis_time,
-    parse_untis_date,
+    Config, ParsedAbsence, format_untis_date, format_untis_time, parse_untis_date,
 };
 use chrono::NaiveDate;
 use reqwest::header::COOKIE;
-use serde::{ Deserialize, Deserializer };
+use serde::{Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct AbsencesPayload {
@@ -42,31 +38,29 @@ impl WebUntisClient {
         &self,
         session: &UntisSession,
         range_start: NaiveDate,
-        range_end: NaiveDate
+        range_end: NaiveDate,
     ) -> Result<AbsencesPayload, WebUntisError> {
-        let response = self.client
+        let response = self
+            .client
             .get(self.url("/WebUntis/api/classreg/absences/students"))
             .header(COOKIE, self.cookie_header(session))
-            .query(
-                &[
-                    ("startDate", format_untis_date(range_start)),
-                    ("endDate", format_untis_date(range_end)),
-                    ("studentId", session.person_id.to_string()),
-                    ("excuseStatusId", "-1".to_owned()),
-                ]
-            )
-            .send().await?;
+            .query(&[
+                ("startDate", format_untis_date(range_start)),
+                ("endDate", format_untis_date(range_end)),
+                ("studentId", session.person_id.to_string()),
+                ("excuseStatusId", "-1".to_owned()),
+            ])
+            .send()
+            .await?;
         let raw = response.text().await?;
         extract_absence_payload(&raw)
     }
 }
 
 pub(super) fn extract_absence_payload(raw: &str) -> Result<AbsencesPayload, WebUntisError> {
-    let value: serde_json::Value = serde_json
-        ::from_str(raw)
-        .map_err(|error|
-            WebUntisError::Message(format!("Failed to parse absences response: {error}"))
-        )?;
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|error| {
+        WebUntisError::Message(format!("Failed to parse absences response: {error}"))
+    })?;
 
     let absences = value
         .get("data")
@@ -75,21 +69,23 @@ pub(super) fn extract_absence_payload(raw: &str) -> Result<AbsencesPayload, WebU
         .cloned()
         .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
 
-    let absences = serde_json
-        ::from_value(absences)
-        .map_err(|error| {
-            WebUntisError::Message(format!("Failed to parse absences payload: {error}"))
-        })?;
+    let absences = serde_json::from_value(absences).map_err(|error| {
+        WebUntisError::Message(format!("Failed to parse absences payload: {error}"))
+    })?;
 
     Ok(AbsencesPayload { absences })
 }
 
-fn string_or_default<'de, D>(deserializer: D) -> Result<String, D::Error> where D: Deserializer<'de> {
+fn string_or_default<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
     Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 pub(super) fn map_absence_payload(config: &Config, payload: AbsencesPayload) -> Vec<ParsedAbsence> {
-    let mut absences = payload.absences
+    let mut absences = payload
+        .absences
         .into_iter()
         .filter_map(|absence| {
             Some(ParsedAbsence {

@@ -1,11 +1,7 @@
-use super::absences::{ AbsencesPayload, RawAbsence, extract_absence_payload, map_absence_payload };
+use super::absences::{AbsencesPayload, RawAbsence, extract_absence_payload, map_absence_payload};
 use super::search::search_timetable_targets;
 use crate::models::{
-    Config,
-    ParsedLesson,
-    TimeUnit,
-    TimetableSearchItem,
-    TimetableSearchTargetType,
+    Config, ParsedLesson, TimeUnit, TimetableSearchItem, TimetableSearchTargetType,
     parse_time_to_minutes,
 };
 
@@ -14,14 +10,16 @@ fn item(
     target_type: TimetableSearchTargetType,
     name: &str,
     long_name: &str,
-    search_text: Option<&str>
+    search_text: Option<&str>,
 ) -> TimetableSearchItem {
     TimetableSearchItem {
         r#type: target_type,
         id,
         name: name.to_owned(),
         long_name: long_name.to_owned(),
-        search_text: search_text.unwrap_or(&format!("{name} {long_name}")).to_lowercase(),
+        search_text: search_text
+            .unwrap_or(&format!("{name} {long_name}"))
+            .to_lowercase(),
     }
 }
 
@@ -29,17 +27,26 @@ fn item(
 fn timetable_search_ranking_matches_contains_case_insensitively() {
     let results = search_timetable_targets(
         &[
-            item(1, TimetableSearchTargetType::Teacher, "MrMiller", "Miller", None),
-            item(2, TimetableSearchTargetType::Room, "Room A12", "Science Room", None),
+            item(
+                1,
+                TimetableSearchTargetType::Teacher,
+                "MrMiller",
+                "Miller",
+                None,
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Room,
+                "Room A12",
+                "Science Room",
+                None,
+            ),
         ],
         "MILL",
-        Some(10)
+        Some(10),
     );
     assert_eq!(
-        results
-            .iter()
-            .map(|entry| entry.id)
-            .collect::<Vec<_>>(),
+        results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
         vec![1]
     );
 }
@@ -48,18 +55,33 @@ fn timetable_search_ranking_matches_contains_case_insensitively() {
 fn timetable_search_ranking_prioritizes_starts_with_over_contains_matches() {
     let results = search_timetable_targets(
         &[
-            item(1, TimetableSearchTargetType::Teacher, "Tina", "Teacher Tina", None),
-            item(2, TimetableSearchTargetType::Teacher, "Math", "Advanced Tina Group", None),
-            item(3, TimetableSearchTargetType::Teacher, "Bio", "Tina Biology", None),
+            item(
+                1,
+                TimetableSearchTargetType::Teacher,
+                "Tina",
+                "Teacher Tina",
+                None,
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Teacher,
+                "Math",
+                "Advanced Tina Group",
+                None,
+            ),
+            item(
+                3,
+                TimetableSearchTargetType::Teacher,
+                "Bio",
+                "Tina Biology",
+                None,
+            ),
         ],
         "ti",
-        Some(10)
+        Some(10),
     );
     assert_eq!(
-        results
-            .iter()
-            .map(|entry| entry.id)
-            .collect::<Vec<_>>(),
+        results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
         vec![1, 3, 2]
     );
 }
@@ -68,12 +90,24 @@ fn timetable_search_ranking_prioritizes_starts_with_over_contains_matches() {
 fn timetable_search_ranking_keeps_mixed_type_ordering_stable_for_equal_rank() {
     let results = search_timetable_targets(
         &[
-            item(2, TimetableSearchTargetType::Teacher, "A-Name", "A-Name", None),
-            item(1, TimetableSearchTargetType::Class, "A-Name", "A-Name", None),
+            item(
+                2,
+                TimetableSearchTargetType::Teacher,
+                "A-Name",
+                "A-Name",
+                None,
+            ),
+            item(
+                1,
+                TimetableSearchTargetType::Class,
+                "A-Name",
+                "A-Name",
+                None,
+            ),
             item(3, TimetableSearchTargetType::Room, "A-Name", "A-Name", None),
         ],
         "a-",
-        Some(10)
+        Some(10),
     );
     assert_eq!(
         results
@@ -93,24 +127,21 @@ fn timetable_search_ranking_matches_multi_token_queries_across_name_fields() {
                 TimetableSearchTargetType::Teacher,
                 "Max Mustermann",
                 "MMAX",
-                Some("max mustermann mmax")
+                Some("max mustermann mmax"),
             ),
             item(
                 2,
                 TimetableSearchTargetType::Teacher,
                 "Max Muster",
                 "MMUS",
-                Some("max muster mmus")
+                Some("max muster mmus"),
             ),
         ],
         "max mmax",
-        None
+        None,
     );
     assert_eq!(
-        results
-            .iter()
-            .map(|entry| entry.id)
-            .collect::<Vec<_>>(),
+        results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
         vec![1]
     );
 }
@@ -124,7 +155,7 @@ fn timetable_search_ranking_returns_all_matches_when_no_limit_is_provided() {
             item(3, TimetableSearchTargetType::Teacher, "AC", "AC", None),
         ],
         "a",
-        None
+        None,
     );
     assert_eq!(results.len(), 3);
 }
@@ -165,7 +196,7 @@ fn repeated_rows_logic_repeats_multi_period_lessons() {
             name: "3".into(),
             start_time: "09:40".into(),
             end_time: "10:30".into(),
-        }
+        },
     ];
     let hits = periods
         .iter()
@@ -213,7 +244,7 @@ fn absence_mapping_uses_bun_compatible_fields_and_sorting() {
                 text: "Doctor".into(),
                 excuse_status: "Excused".into(),
                 is_excused: true,
-            }
+            },
         ],
     };
 
@@ -229,8 +260,7 @@ fn absence_mapping_uses_bun_compatible_fields_and_sorting() {
 
 #[test]
 fn absence_payload_extractor_reads_wrapped_response_with_unicode_fields() {
-    let raw =
-        r#"{
+    let raw = r#"{
         "data": {
             "absences": [
                 {

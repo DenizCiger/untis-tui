@@ -1,6 +1,4 @@
-use super::{
-    AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, WorkerEvent,
-};
+use super::{AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, WorkerEvent};
 use crate::models::{
     Config, TimetableSearchItem, TimetableTarget, WeekTimetable, build_profile_key,
     target_to_cache_key,
@@ -105,6 +103,7 @@ impl AppState {
                 self.main.timetable.data = Some(data.clone());
                 self.main.timetable.is_from_cache = false;
                 self.main.timetable.error.clear();
+                self.sync_timetable_scroll();
                 let monday = crate::models::get_monday(week_date);
                 let _ = save_week_to_cache(
                     &crate::models::format_web_date(monday),
@@ -112,7 +111,10 @@ impl AppState {
                     &target_to_cache_key(Some(&target)),
                 );
             }
-            Err(error) => self.main.timetable.error = error,
+            Err(error) => {
+                self.main.timetable.error = error;
+                self.sync_timetable_scroll();
+            }
         }
         Vec::new()
     }

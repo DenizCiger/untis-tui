@@ -77,7 +77,10 @@ impl WindowFilter {
             WindowFilter::D180 => 180,
             WindowFilter::D365 => 365,
         };
-        Some(crate::models::add_days(crate::models::today_local(), -(days as i64) + 1))
+        Some(crate::models::add_days(
+            crate::models::today_local(),
+            -(days as i64) + 1,
+        ))
     }
 
     pub fn label(self) -> &'static str {

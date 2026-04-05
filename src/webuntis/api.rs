@@ -1,8 +1,8 @@
 use super::auth::UntisSession;
 use super::client::{WebUntisClient, WebUntisError};
+use reqwest::header::COOKIE;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use reqwest::header::COOKIE;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct RpcEnvelope<T> {

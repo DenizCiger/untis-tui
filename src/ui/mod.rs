@@ -2,9 +2,9 @@ mod absences;
 mod login;
 mod shared;
 mod shell;
-mod theme;
 #[cfg(test)]
 mod tests;
+mod theme;
 mod timetable;
 
 use crate::app::state::{AppState, Screen};
