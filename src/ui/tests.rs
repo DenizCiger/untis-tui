@@ -1,13 +1,10 @@
-use super::render;
-use crate::app::state::{ AppState, Screen };
+use super::{
+    ShellClickTarget, TimetableTitleClickTarget, absence_layout_geometry,
+    hit_test_absence_history_click, hit_test_shell_click, hit_test_timetable_title_click, render,
+};
+use crate::app::state::{AppState, Screen};
 use crate::models::{
-    Config,
-    DayTimetable,
-    ParsedAbsence,
-    ParsedLesson,
-    SavedConfig,
-    TimeUnit,
-    WeekTimetable,
+    Config, DayTimetable, ParsedAbsence, ParsedLesson, SavedConfig, TimeUnit, WeekTimetable,
 };
 use crate::shortcuts::TabId;
 use ratatui::Terminal;
@@ -43,7 +40,7 @@ fn sample_lesson(
     instance_id: &str,
     subject: &str,
     start_time: &str,
-    end_time: &str
+    end_time: &str,
 ) -> ParsedLesson {
     ParsedLesson {
         instance_id: instance_id.into(),
@@ -87,7 +84,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                 &format!("lesson-{index}"),
                 &format!("S{index}"),
                 &period.start_time,
-                &period.end_time
+                &period.end_time,
             )
         })
         .collect::<Vec<_>>();
@@ -116,7 +113,13 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                 lessons: Vec::new(),
             },
             DayTimetable {
-                date: monday.succ_opt().unwrap().succ_opt().unwrap().succ_opt().unwrap(),
+                date: monday
+                    .succ_opt()
+                    .unwrap()
+                    .succ_opt()
+                    .unwrap()
+                    .succ_opt()
+                    .unwrap(),
                 day_name: "Thursday".into(),
                 lessons: Vec::new(),
             },
@@ -132,7 +135,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                     .unwrap(),
                 day_name: "Friday".into(),
                 lessons: Vec::new(),
-            }
+            },
         ],
         timegrid,
     }
@@ -148,7 +151,7 @@ fn overlap_timetable() -> WeekTimetable {
                 lessons: vec![
                     sample_lesson("overlap-a", "M", "08:00", "09:40"),
                     sample_lesson("overlap-b", "E", "08:00", "08:50"),
-                    sample_lesson("overlap-c", "B", "08:50", "09:40")
+                    sample_lesson("overlap-c", "B", "08:50", "09:40"),
                 ],
             },
             DayTimetable {
@@ -162,7 +165,13 @@ fn overlap_timetable() -> WeekTimetable {
                 lessons: Vec::new(),
             },
             DayTimetable {
-                date: monday.succ_opt().unwrap().succ_opt().unwrap().succ_opt().unwrap(),
+                date: monday
+                    .succ_opt()
+                    .unwrap()
+                    .succ_opt()
+                    .unwrap()
+                    .succ_opt()
+                    .unwrap(),
                 day_name: "Thursday".into(),
                 lessons: Vec::new(),
             },
@@ -178,7 +187,7 @@ fn overlap_timetable() -> WeekTimetable {
                     .unwrap(),
                 day_name: "Friday".into(),
                 lessons: Vec::new(),
-            }
+            },
         ],
         timegrid: vec![
             TimeUnit {
@@ -200,7 +209,7 @@ fn overlap_timetable() -> WeekTimetable {
                 name: "4".into(),
                 start_time: "10:30".into(),
                 end_time: "11:20".into(),
-            }
+            },
         ],
     }
 }
@@ -237,6 +246,50 @@ fn render_main_shell_shows_tabs() {
     let output = buffer_text(terminal.backend().buffer());
     assert!(output.contains("Timetable"));
     assert!(output.contains("Absences"));
+}
+
+#[test]
+fn shell_hit_test_maps_tab_clicks_and_ignores_other_header_areas() {
+    assert_eq!(
+        hit_test_shell_click(1, 0),
+        Some(ShellClickTarget::Tab(TabId::Timetable))
+    );
+    assert_eq!(
+        hit_test_shell_click(12, 0),
+        Some(ShellClickTarget::Tab(TabId::Absences))
+    );
+    assert_eq!(hit_test_shell_click(25, 0), None);
+    assert_eq!(hit_test_shell_click(1, 1), None);
+}
+
+#[test]
+fn timetable_title_hit_test_maps_only_arrow_clicks() {
+    let prev_column = (0..140)
+        .find(|column| {
+            hit_test_timetable_title_click(140, *column, 3, 0)
+                == Some(TimetableTitleClickTarget::PrevWeek)
+        })
+        .unwrap();
+    let next_column = (0..140)
+        .find(|column| {
+            hit_test_timetable_title_click(140, *column, 3, 0)
+                == Some(TimetableTitleClickTarget::NextWeek)
+        })
+        .unwrap();
+
+    assert_eq!(
+        hit_test_timetable_title_click(140, prev_column, 3, 0),
+        Some(TimetableTitleClickTarget::PrevWeek)
+    );
+    assert_eq!(
+        hit_test_timetable_title_click(140, next_column, 3, 0),
+        Some(TimetableTitleClickTarget::NextWeek)
+    );
+    assert_eq!(
+        hit_test_timetable_title_click(140, prev_column + 1, 3, 0),
+        None
+    );
+    assert_eq!(hit_test_timetable_title_click(140, prev_column, 2, 0), None);
 }
 
 #[test]
@@ -376,6 +429,82 @@ fn render_absences_narrow_layout_stacks_and_uses_compact_filter_header() {
     assert!(output.contains("26.03"));
     assert!(output.contains("Summary"));
     assert!(output.contains("Details"));
+}
+
+#[test]
+fn absence_hit_test_selects_visible_rows_and_ignores_non_history_regions() {
+    let geometry = absence_layout_geometry(120, 35, 8, 0);
+    let target = hit_test_absence_history_click(
+        120,
+        35,
+        8,
+        0,
+        geometry.history_inner.x,
+        geometry.history_inner.y + 1,
+    )
+    .unwrap();
+    assert_eq!(target.selected_idx, 0);
+
+    assert!(
+        hit_test_absence_history_click(
+            120,
+            35,
+            8,
+            0,
+            geometry.history_area.x,
+            geometry.history_area.y,
+        )
+        .is_none()
+    );
+    assert!(
+        hit_test_absence_history_click(
+            120,
+            35,
+            8,
+            0,
+            geometry.history_inner.x,
+            geometry.history_inner.y,
+        )
+        .is_none()
+    );
+    assert!(
+        hit_test_absence_history_click(
+            120,
+            35,
+            8,
+            0,
+            geometry.history_inner.x,
+            geometry.history_inner.y + 1 + geometry.visible_rows as u16,
+        )
+        .is_none()
+    );
+}
+
+#[test]
+fn absence_hit_test_maps_centered_visible_window_in_wide_and_narrow_layouts() {
+    let wide = absence_layout_geometry(120, 35, 20, 10);
+    let wide_target = hit_test_absence_history_click(
+        120,
+        35,
+        20,
+        10,
+        wide.history_inner.x,
+        wide.history_inner.y + 3,
+    )
+    .unwrap();
+    assert_eq!(wide_target.selected_idx, wide.visible_start + 2);
+
+    let narrow = absence_layout_geometry(90, 30, 20, 10);
+    let narrow_target = hit_test_absence_history_click(
+        90,
+        30,
+        20,
+        10,
+        narrow.history_inner.x,
+        narrow.history_inner.y + 2,
+    )
+    .unwrap();
+    assert_eq!(narrow_target.selected_idx, narrow.visible_start + 1);
 }
 
 #[test]

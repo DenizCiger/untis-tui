@@ -1,9 +1,13 @@
 use super::{AppCommand, AppState, LoginField, TextInputState};
 use crate::models::{TimetableTarget, today_local};
 use crate::shortcuts::{TabId, is_shortcut_pressed};
-use crate::timetable_model::find_next_lesson_period_index;
+use crate::timetable_model::{find_next_lesson_period_index, hit_test_timetable_click};
+use crate::ui::{
+    ShellClickTarget, TimetableTitleClickTarget, hit_test_absence_history_click,
+    hit_test_shell_click, hit_test_timetable_title_click,
+};
 use chrono::Datelike;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 impl AppState {
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
@@ -17,6 +21,13 @@ impl AppState {
             }
             super::Screen::Login => self.handle_login_key(key),
             super::Screen::MainShell => self.handle_main_key(key),
+        }
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<AppCommand> {
+        match self.screen {
+            super::Screen::MainShell => self.handle_main_mouse(mouse),
+            _ => Vec::new(),
         }
     }
 
@@ -137,6 +148,89 @@ impl AppState {
         match self.main.active_tab {
             TabId::Timetable => self.handle_timetable_key(key),
             TabId::Absences => self.handle_absences_key(key),
+        }
+    }
+
+    fn handle_main_mouse(&mut self, mouse: MouseEvent) -> Vec<AppCommand> {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return Vec::new();
+        }
+
+        if self.main.settings_open
+            || self.main.timetable.search_open
+            || self.main.absences.search_open
+        {
+            return Vec::new();
+        }
+
+        if let Some(ShellClickTarget::Tab(tab)) = hit_test_shell_click(mouse.column, mouse.row) {
+            self.main.active_tab = tab;
+            return Vec::new();
+        }
+
+        match self.main.active_tab {
+            TabId::Timetable => {
+                if let Some(target) = hit_test_timetable_title_click(
+                    self.terminal_width,
+                    mouse.column,
+                    mouse.row,
+                    self.main.timetable.week_offset,
+                ) {
+                    match target {
+                        TimetableTitleClickTarget::PrevWeek => {
+                            self.main.timetable.week_offset -= 1;
+                        }
+                        TimetableTitleClickTarget::NextWeek => {
+                            self.main.timetable.week_offset += 1;
+                        }
+                    }
+                    self.main.timetable.selected_period_idx = 0;
+                    self.main.timetable.selected_lesson_idx = 0;
+                    self.main.timetable.scroll_offset = 0;
+                    return self.request_timetable(false);
+                }
+
+                let Some(data) = self.main.timetable.data.as_ref() else {
+                    return Vec::new();
+                };
+                let Some(model) = self.timetable_render_model() else {
+                    return Vec::new();
+                };
+
+                let Some(target) = hit_test_timetable_click(
+                    data,
+                    &model,
+                    self.terminal_width,
+                    self.terminal_height,
+                    self.main.timetable.scroll_offset,
+                    mouse.column,
+                    mouse.row,
+                ) else {
+                    return Vec::new();
+                };
+
+                self.main.timetable.selected_day_idx = target.day_idx;
+                self.main.timetable.selected_period_idx = target.period_idx;
+                self.main.timetable.selected_lesson_idx = target.lesson_idx;
+                self.sync_timetable_scroll();
+                Vec::new()
+            }
+            TabId::Absences => {
+                let filtered_len = self.filtered_absences().len();
+                let Some(target) = hit_test_absence_history_click(
+                    self.terminal_width,
+                    self.terminal_height,
+                    filtered_len,
+                    self.main.absences.selected_idx,
+                    mouse.column,
+                    mouse.row,
+                ) else {
+                    return Vec::new();
+                };
+
+                self.main.absences.selected_idx = target.selected_idx;
+                self.maybe_request_more_absences()
+            }
         }
     }
 

@@ -10,6 +10,11 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShellClickTarget {
+    Tab(TabId),
+}
+
 pub(super) fn render_main(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
     let layout = Layout::default()
@@ -70,6 +75,26 @@ pub(super) fn render_main(frame: &mut Frame, state: &AppState) {
     }
     if state.main.timetable.search_open {
         render_timetable_search_popup(frame, state, area);
+    }
+}
+
+pub(crate) fn hit_test_shell_click(column: u16, row: u16) -> Option<ShellClickTarget> {
+    if row != 0 {
+        return None;
+    }
+
+    let timetable_width = " Timetable ".len() as u16;
+    let absences_width = " Absences ".len() as u16;
+    let tabs_width = timetable_width + absences_width;
+
+    if column >= tabs_width {
+        return None;
+    }
+
+    if column < timetable_width {
+        Some(ShellClickTarget::Tab(TabId::Timetable))
+    } else {
+        Some(ShellClickTarget::Tab(TabId::Absences))
     }
 }
 

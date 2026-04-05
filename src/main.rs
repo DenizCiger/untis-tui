@@ -1,4 +1,7 @@
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, KeyEventKind};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event as CrosstermEvent, KeyEvent, KeyEventKind,
+    MouseEvent,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -18,6 +21,7 @@ use untis_tui::webuntis::WebUntisClient;
 #[derive(Debug)]
 enum RuntimeEvent {
     Key(KeyEvent),
+    Mouse(MouseEvent),
     Resize(u16, u16),
     Worker(WorkerEvent),
 }
@@ -26,7 +30,7 @@ enum RuntimeEvent {
 async fn main() -> io::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -34,7 +38,11 @@ async fn main() -> io::Result<()> {
     let result = run_app(&mut terminal).await;
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     result
@@ -60,6 +68,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
                 match event {
                     RuntimeEvent::Key(key) => {
                         let commands = state.handle_key(key);
+                        if handle_commands(&tx, &mut state, commands) {
+                            break;
+                        }
+                    }
+                    RuntimeEvent::Mouse(mouse) => {
+                        let commands = state.handle_mouse(mouse);
                         if handle_commands(&tx, &mut state, commands) {
                             break;
                         }
@@ -106,6 +120,9 @@ fn spawn_input_thread(tx: mpsc::UnboundedSender<RuntimeEvent>) {
                     if key.kind == KeyEventKind::Press {
                         let _ = tx.send(RuntimeEvent::Key(key));
                     }
+                }
+                Ok(CrosstermEvent::Mouse(mouse)) => {
+                    let _ = tx.send(RuntimeEvent::Mouse(mouse));
                 }
                 Ok(CrosstermEvent::Resize(width, height)) => {
                     let _ = tx.send(RuntimeEvent::Resize(width, height));

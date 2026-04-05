@@ -3,7 +3,12 @@ use crate::models::{
     Config, DayTimetable, ParsedAbsence, ParsedLesson, TimeUnit, TimetableTarget, WeekTimetable,
     add_days, today_local,
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::shortcuts::TabId;
+use crate::timetable_model::{DAY_HEADER_ROWS, GRID_ROW_HEIGHT, timetable_grid_geometry};
+use crate::ui::{
+    TimetableTitleClickTarget, absence_layout_geometry, hit_test_timetable_title_click,
+};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 fn sample_config() -> Config {
     Config {
@@ -159,6 +164,15 @@ fn overlap_week_timetable() -> WeekTimetable {
                 end_time: "09:40".into(),
             },
         ],
+    }
+}
+
+fn left_click(column: u16, row: u16) -> MouseEvent {
+    MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
     }
 }
 
@@ -452,4 +466,209 @@ fn timetable_overlap_cycle_uses_visible_lane_order() {
     let _ = state.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
     assert_eq!(state.main.timetable.selected_period_idx, 1);
     assert_eq!(state.selected_timetable_lesson().unwrap().subject, "M");
+}
+
+#[test]
+fn timetable_mouse_click_updates_selection_and_scroll() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.terminal_height = 24;
+    state.main.timetable.data = Some(sample_week_timetable(8));
+    state.main.timetable.scroll_offset = 2;
+
+    let geometry = timetable_grid_geometry(120, 24, 8, 2);
+    let visible_period_row = geometry.grid_y + DAY_HEADER_ROWS + 1 + (2 * GRID_ROW_HEIGHT);
+    let click = left_click(geometry.time_width + 1, visible_period_row);
+
+    let commands = state.handle_mouse(click);
+
+    assert!(commands.is_empty());
+    assert_eq!(state.main.timetable.selected_day_idx, 0);
+    assert_eq!(state.main.timetable.selected_period_idx, 4);
+    assert_eq!(state.main.timetable.selected_lesson_idx, 0);
+    assert_eq!(state.main.timetable.scroll_offset, 2);
+}
+
+#[test]
+fn timetable_mouse_click_is_ignored_while_modal_or_search_is_open() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.terminal_height = 24;
+    state.main.timetable.data = Some(sample_week_timetable(8));
+    state.main.timetable.selected_period_idx = 1;
+    state.main.settings_open = true;
+
+    let geometry = timetable_grid_geometry(120, 24, 8, 0);
+    let click = left_click(geometry.time_width + 1, geometry.grid_y + DAY_HEADER_ROWS);
+    let _ = state.handle_mouse(click);
+    assert_eq!(state.main.timetable.selected_period_idx, 1);
+
+    state.main.settings_open = false;
+    state.main.timetable.search_open = true;
+    let _ = state.handle_mouse(click);
+    assert_eq!(state.main.timetable.selected_period_idx, 1);
+}
+
+#[test]
+fn timetable_mouse_click_is_ignored_outside_timetable_tab() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.main.active_tab = TabId::Absences;
+    state.main.timetable.data = Some(sample_week_timetable(8));
+    state.main.timetable.selected_period_idx = 1;
+
+    let geometry = timetable_grid_geometry(120, 24, 8, 0);
+    let click = left_click(geometry.time_width + 1, geometry.grid_y + DAY_HEADER_ROWS);
+    let _ = state.handle_mouse(click);
+
+    assert_eq!(state.main.timetable.selected_period_idx, 1);
+}
+
+#[test]
+fn mouse_click_switches_tabs_from_tab_bar() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+
+    let _ = state.handle_mouse(left_click(12, 0));
+    assert_eq!(state.main.active_tab, TabId::Absences);
+
+    let _ = state.handle_mouse(left_click(1, 0));
+    assert_eq!(state.main.active_tab, TabId::Timetable);
+}
+
+#[test]
+fn timetable_title_arrow_clicks_navigate_weeks() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.config = Some(sample_config());
+    state.terminal_width = 140;
+    state.terminal_height = 32;
+    state.main.timetable.data = Some(sample_week_timetable(4));
+    state.main.timetable.week_offset = 1;
+    state.main.timetable.selected_period_idx = 2;
+    state.main.timetable.selected_lesson_idx = 1;
+    state.main.timetable.scroll_offset = 2;
+
+    let prev_column = (0..state.terminal_width)
+        .find(|column| {
+            hit_test_timetable_title_click(
+                state.terminal_width,
+                *column,
+                3,
+                state.main.timetable.week_offset,
+            ) == Some(TimetableTitleClickTarget::PrevWeek)
+        })
+        .unwrap();
+    let prev_commands = state.handle_mouse(left_click(prev_column, 3));
+    assert!(
+        prev_commands
+            .iter()
+            .any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
+    );
+    assert_eq!(state.main.timetable.week_offset, 0);
+    assert_eq!(state.main.timetable.selected_period_idx, 0);
+    assert_eq!(state.main.timetable.selected_lesson_idx, 0);
+    assert_eq!(state.main.timetable.scroll_offset, 0);
+
+    let next_column = (0..state.terminal_width)
+        .find(|column| {
+            hit_test_timetable_title_click(
+                state.terminal_width,
+                *column,
+                3,
+                state.main.timetable.week_offset,
+            ) == Some(TimetableTitleClickTarget::NextWeek)
+        })
+        .unwrap();
+    let next_commands = state.handle_mouse(left_click(next_column, 3));
+    assert!(
+        next_commands
+            .iter()
+            .any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
+    );
+    assert_eq!(state.main.timetable.week_offset, 1);
+}
+
+#[test]
+fn absence_mouse_click_updates_selected_row() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.main.active_tab = TabId::Absences;
+    state.terminal_width = 120;
+    state.terminal_height = 35;
+    for index in 0..8 {
+        state.main.absences.absences.push(sample_absence(
+            index as i64,
+            add_days(today_local(), -(index as i64)),
+        ));
+    }
+
+    let geometry = absence_layout_geometry(120, 35, state.filtered_absences().len(), 0);
+    let click = left_click(geometry.history_inner.x, geometry.history_inner.y + 3);
+    let commands = state.handle_mouse(click);
+
+    assert!(commands.is_empty());
+    assert_eq!(state.main.absences.selected_idx, 2);
+}
+
+#[test]
+fn absence_mouse_click_near_bottom_triggers_prefetch_logic() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.config = Some(sample_config());
+    state.main.active_tab = TabId::Absences;
+    state.terminal_width = 120;
+    state.terminal_height = 35;
+    state.main.absences.has_more = true;
+    for index in 0..8 {
+        state.main.absences.absences.push(sample_absence(
+            index as i64,
+            add_days(today_local(), -(index as i64)),
+        ));
+    }
+
+    let geometry = absence_layout_geometry(120, 35, state.filtered_absences().len(), 0);
+    let last_row_offset = geometry.visible_rows.saturating_sub(1) as u16;
+    let click = left_click(
+        geometry.history_inner.x,
+        geometry.history_inner.y + 1 + last_row_offset,
+    );
+    let commands = state.handle_mouse(click);
+
+    assert!(commands.iter().any(|command| matches!(
+        command,
+        AppCommand::LoadAbsenceChunk {
+            is_initial: false,
+            ..
+        }
+    )));
+    assert_eq!(
+        state.main.absences.selected_idx,
+        geometry.visible_start + geometry.visible_rows.saturating_sub(1)
+    );
+}
+
+#[test]
+fn mouse_clicks_are_ignored_while_absence_search_is_open() {
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.main.active_tab = TabId::Absences;
+    state.main.absences.search_open = true;
+    state.main.absences.selected_idx = 1;
+    state.terminal_width = 120;
+    state.terminal_height = 35;
+    for index in 0..8 {
+        state.main.absences.absences.push(sample_absence(
+            index as i64,
+            add_days(today_local(), -(index as i64)),
+        ));
+    }
+
+    let geometry = absence_layout_geometry(120, 35, state.filtered_absences().len(), 1);
+    let _ = state.handle_mouse(left_click(
+        geometry.history_inner.x,
+        geometry.history_inner.y + 2,
+    ));
+
+    assert_eq!(state.main.absences.selected_idx, 1);
 }

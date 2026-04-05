@@ -12,6 +12,12 @@ use ratatui::Frame;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+#[cfg(test)]
+pub(crate) use absences::absence_layout_geometry;
+pub(crate) use absences::hit_test_absence_history_click;
+pub(crate) use shell::{ShellClickTarget, hit_test_shell_click};
+pub(crate) use timetable::{TimetableTitleClickTarget, hit_test_timetable_title_click};
+
 pub fn render(frame: &mut Frame, state: &AppState) {
     match state.screen {
         Screen::Loading => render_loading(frame),

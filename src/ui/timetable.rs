@@ -1,59 +1,36 @@
 use super::shared::{
-    centered_message_lines,
-    centered_rect,
-    fit_text,
-    line_with_right,
-    render_input_text,
+    centered_message_lines, centered_rect, fit_text, line_with_right, render_input_text,
 };
 use super::theme::{
-    ALT_BG,
-    BLACK,
-    BRAND,
-    BRIGHT_WHITE,
-    DIM_GRAY,
-    ERROR,
-    INFO,
-    LESSON_CANCELLED_BG,
-    LESSON_CANCELLED_FOCUS_BG,
-    LESSON_DEFAULT_BG,
-    LESSON_DEFAULT_FOCUS_BG,
-    LESSON_EXAM_BG,
-    LESSON_EXAM_FOCUS_BG,
-    LESSON_SUBSTITUTION_BG,
-    LESSON_SUBSTITUTION_FOCUS_BG,
-    NEUTRAL_LIGHT,
-    NEUTRAL_MID,
-    SUBJECT_STRIPE_COLORS,
-    WARNING,
+    ALT_BG, BLACK, BRAND, BRIGHT_WHITE, DIM_GRAY, ERROR, INFO, LESSON_CANCELLED_BG,
+    LESSON_CANCELLED_FOCUS_BG, LESSON_DEFAULT_BG, LESSON_DEFAULT_FOCUS_BG, LESSON_EXAM_BG,
+    LESSON_EXAM_FOCUS_BG, LESSON_SUBSTITUTION_BG, LESSON_SUBSTITUTION_FOCUS_BG, NEUTRAL_LIGHT,
+    NEUTRAL_MID, SUBJECT_STRIPE_COLORS, WARNING,
 };
 use crate::app::state::AppState;
-use crate::models::{ ParsedLesson, TimeUnit };
+use crate::models::{ParsedLesson, TimeUnit};
 use crate::timetable_model::{
-    Continuation,
-    GRID_ROW_HEIGHT,
-    MIN_DETAILS_HEIGHT,
-    SPLIT_DAY_COLUMN_MIN_WIDTH,
-    TimetableRenderModel,
-    build_render_model,
-    day_column_width,
-    find_current_period_index,
-    is_compact,
-    lessons_for_period,
-    selected_lesson_position,
-    time_column_width,
-    timetable_rows_per_page,
+    Continuation, DAY_COUNT, GRID_ROW_HEIGHT, MIN_DETAILS_HEIGHT, SHELL_HEADER_HEIGHT,
+    SPLIT_DAY_COLUMN_MIN_WIDTH, TimetableRenderModel, build_render_model,
+    find_current_period_index, is_compact, lessons_for_period, selected_lesson_position,
+    timetable_grid_geometry,
 };
 use crate::webuntis::format_timetable_search_type_label;
 use ratatui::Frame;
-use ratatui::layout::{ Constraint, Direction, Layout, Rect };
-use ratatui::style::{ Color, Modifier, Style };
-use ratatui::text::{ Line, Span };
-use ratatui::widgets::{ Block, Borders, Clear, Paragraph, Wrap };
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use std::collections::HashMap;
 use unicode_width::UnicodeWidthStr;
 
 const TITLE_ROWS: u16 = 2;
-const DAY_COUNT: usize = 5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TimetableTitleClickTarget {
+    PrevWeek,
+    NextWeek,
+}
 
 pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) {
     let layout = Layout::default()
@@ -63,7 +40,7 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
 
     frame.render_widget(
         Paragraph::new(build_timetable_title_lines(state, layout[0].width)),
-        layout[0]
+        layout[0],
     );
 
     let body_area = layout[1];
@@ -71,14 +48,19 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
 
     if let Some(data) = state.main.timetable.data.as_ref() {
         let model = build_render_model(data, 2);
-        let compact = is_compact(area.width, area.height);
-        let time_width = time_column_width(area.width, area.height);
-        let day_width = day_column_width(area.width, area.height);
-        let rows_per_page = timetable_rows_per_page(area.height).max(1);
-        let scroll_offset = state.main.timetable.scroll_offset.min(
-            data.timegrid.len().saturating_sub(rows_per_page)
+        let geometry = timetable_grid_geometry(
+            area.width,
+            area.height + SHELL_HEADER_HEIGHT,
+            data.timegrid.len(),
+            state.main.timetable.scroll_offset,
         );
-        let visible_periods = data.timegrid
+        let compact = is_compact(area.width, area.height);
+        let time_width = geometry.time_width;
+        let day_width = geometry.day_width;
+        let rows_per_page = geometry.visible_period_count.max(1);
+        let scroll_offset = geometry.scroll_offset;
+        let visible_periods = data
+            .timegrid
             .iter()
             .enumerate()
             .skip(scroll_offset)
@@ -93,27 +75,35 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
             day_width,
             body_area.width,
             scroll_offset,
-            &visible_periods
+            &visible_periods,
         );
-        let grid_height = (grid_lines.len() as u16).min(
-            body_area.height.saturating_sub(details_min_height)
-        );
+        let grid_height =
+            (grid_lines.len() as u16).min(body_area.height.saturating_sub(details_min_height));
         let content_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(grid_height), Constraint::Min(details_min_height)])
+            .constraints([
+                Constraint::Length(grid_height),
+                Constraint::Min(details_min_height),
+            ])
             .split(body_area);
         let details_lines = build_timetable_details(
             state,
             content_layout[1].width,
-            Some(build_grid_divider(time_width, day_width, DAY_COUNT, "┴", content_layout[1].width))
+            Some(build_grid_divider(
+                time_width,
+                day_width,
+                DAY_COUNT,
+                "┴",
+                content_layout[1].width,
+            )),
         );
         frame.render_widget(
             Paragraph::new(grid_lines).wrap(Wrap { trim: false }),
-            content_layout[0]
+            content_layout[0],
         );
         frame.render_widget(
             Paragraph::new(details_lines).wrap(Wrap { trim: false }),
-            content_layout[1]
+            content_layout[1],
         );
         return;
     }
@@ -131,25 +121,21 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
         &state.main.timetable.error
     };
     frame.render_widget(
-        Paragraph::new(
-            centered_message_lines(
-                empty_message,
-                content_layout[0].height,
-                content_layout[0].width,
-                Style::default().fg(
-                    if state.main.timetable.error.is_empty() {
-                        WARNING
-                    } else {
-                        ERROR
-                    }
-                )
-            )
-        ),
-        content_layout[0]
+        Paragraph::new(centered_message_lines(
+            empty_message,
+            content_layout[0].height,
+            content_layout[0].width,
+            Style::default().fg(if state.main.timetable.error.is_empty() {
+                WARNING
+            } else {
+                ERROR
+            }),
+        )),
+        content_layout[0],
     );
     frame.render_widget(
         Paragraph::new(details_lines).wrap(Wrap { trim: false }),
-        content_layout[1]
+        content_layout[1],
     );
 }
 
@@ -164,55 +150,53 @@ pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState,
     frame.render_widget(block, popup);
 
     let mut lines = vec![
-        Line::from(
-            format!(
-                "> {}",
-                render_input_text(
-                    &state.main.timetable.search_input.value,
-                    state.main.timetable.search_input.cursor,
-                    false
-                )
+        Line::from(format!(
+            "> {}",
+            render_input_text(
+                &state.main.timetable.search_input.value,
+                state.main.timetable.search_input.cursor,
+                false
             )
-        ),
-        Line::from(
-            if state.main.timetable.search_index_loading {
-                "Loading timetable targets...".to_owned()
-            } else if !state.main.timetable.search_index_error.is_empty() {
-                format!("Target load failed: {}", state.main.timetable.search_index_error)
-            } else {
-                "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
-            }
-        ),
-        Line::from("")
+        )),
+        Line::from(if state.main.timetable.search_index_loading {
+            "Loading timetable targets...".to_owned()
+        } else if !state.main.timetable.search_index_error.is_empty() {
+            format!(
+                "Target load failed: {}",
+                state.main.timetable.search_index_error
+            )
+        } else {
+            "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
+        }),
+        Line::from(""),
     ];
 
-    for (index, result) in state.timetable_search_results().into_iter().take(12).enumerate() {
+    for (index, result) in state
+        .timetable_search_results()
+        .into_iter()
+        .take(12)
+        .enumerate()
+    {
         let selected = index == state.main.timetable.search_selected_idx;
-        lines.push(
-            Line::from(
-                vec![
-                    Span::styled(
-                        if selected {
-                            "> "
-                        } else {
-                            "  "
-                        },
-                        Style::default().fg(if selected { BRAND } else { Color::Gray })
-                    ),
-                    Span::styled(
-                        format!("[{}] ", format_timetable_search_type_label(result.r#type)),
-                        Style::default().fg(Color::Gray)
-                    ),
-                    Span::raw(
-                        format!("{}{}", result.name, if result.long_name != result.name {
-                            format!(" ({})", result.long_name)
-                        } else {
-                            String::new()
-                        })
-                    )
-                ]
-            )
-        );
+        lines.push(Line::from(vec![
+            Span::styled(
+                if selected { "> " } else { "  " },
+                Style::default().fg(if selected { BRAND } else { Color::Gray }),
+            ),
+            Span::styled(
+                format!("[{}] ", format_timetable_search_type_label(result.r#type)),
+                Style::default().fg(Color::Gray),
+            ),
+            Span::raw(format!(
+                "{}{}",
+                result.name,
+                if result.long_name != result.name {
+                    format!(" ({})", result.long_name)
+                } else {
+                    String::new()
+                }
+            )),
+        ]));
     }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
@@ -221,23 +205,33 @@ pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState,
 fn build_timetable_title_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
     let (monday, friday) = crate::models::current_week_range(state.main.timetable.week_offset);
     let date_range = if monday != friday {
-        format!("{} - {}", crate::models::format_date(monday), crate::models::format_date(friday))
+        format!(
+            "{} - {}",
+            crate::models::format_date(monday),
+            crate::models::format_date(friday)
+        )
     } else {
         crate::models::format_date(monday)
     };
-    let cached_marker = if state.main.timetable.is_from_cache { " (cached)" } else { "" };
-    let username = state.config
+    let cached_marker = if state.main.timetable.is_from_cache {
+        " (cached)"
+    } else {
+        ""
+    };
+    let username = state
+        .config
         .as_ref()
         .map(|config| format!("{}@{}", config.username, config.school))
         .unwrap_or_default();
     let title = "WebUntis TUI";
     let header_line = if username.is_empty() {
-        Line::from(
-            vec![
-                Span::styled(title, Style::default().fg(BRAND).add_modifier(Modifier::BOLD)),
-                Span::styled(cached_marker, Style::default().fg(Color::Indexed(3)))
-            ]
-        )
+        Line::from(vec![
+            Span::styled(
+                title,
+                Style::default().fg(BRAND).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(cached_marker, Style::default().fg(Color::Indexed(3))),
+        ])
     } else {
         let right_width = UnicodeWidthStr::width(username.as_str());
         if usize::from(width) <= right_width + 1 {
@@ -246,19 +240,20 @@ fn build_timetable_title_lines(state: &AppState, width: u16) -> Vec<Line<'static
                 &username,
                 usize::from(width),
                 Style::default(),
-                Style::default().fg(DIM_GRAY)
+                Style::default().fg(DIM_GRAY),
             )
         } else {
             let left_width = UnicodeWidthStr::width(title) + UnicodeWidthStr::width(cached_marker);
             let gap = usize::from(width).saturating_sub(left_width + right_width);
-            Line::from(
-                vec![
-                    Span::styled(title, Style::default().fg(BRAND).add_modifier(Modifier::BOLD)),
-                    Span::styled(cached_marker, Style::default().fg(Color::Indexed(3))),
-                    Span::raw(" ".repeat(gap.max(1))),
-                    Span::styled(username, Style::default().fg(DIM_GRAY))
-                ]
-            )
+            Line::from(vec![
+                Span::styled(
+                    title,
+                    Style::default().fg(BRAND).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(cached_marker, Style::default().fg(Color::Indexed(3))),
+                Span::raw(" ".repeat(gap.max(1))),
+                Span::styled(username, Style::default().fg(DIM_GRAY)),
+            ])
         }
     };
     let centered_date = format!("‹ {} ›", date_range);
@@ -266,13 +261,49 @@ fn build_timetable_title_lines(state: &AppState, width: u16) -> Vec<Line<'static
         usize::from(width).saturating_sub(UnicodeWidthStr::width(centered_date.as_str())) / 2;
     vec![
         header_line,
-        Line::from(
-            Span::styled(
-                format!("{}{}", " ".repeat(left_pad), centered_date),
-                Style::default().fg(DIM_GRAY)
-            )
-        )
+        Line::from(Span::styled(
+            format!("{}{}", " ".repeat(left_pad), centered_date),
+            Style::default().fg(BRIGHT_WHITE),
+        )),
     ]
+}
+
+pub(crate) fn hit_test_timetable_title_click(
+    terminal_width: u16,
+    column: u16,
+    row: u16,
+    week_offset: i32,
+) -> Option<TimetableTitleClickTarget> {
+    if row != 3 {
+        return None;
+    }
+
+    let (monday, friday) = crate::models::current_week_range(week_offset);
+    let date_range = if monday != friday {
+        format!(
+            "{} - {}",
+            crate::models::format_date(monday),
+            crate::models::format_date(friday)
+        )
+    } else {
+        crate::models::format_date(monday)
+    };
+    let centered_date = format!("‹ {} ›", date_range);
+    let left_pad = usize::from(terminal_width)
+        .saturating_sub(UnicodeWidthStr::width(centered_date.as_str()))
+        / 2;
+    let arrow_left = left_pad as u16;
+    let arrow_right = arrow_left
+        .saturating_add(centered_date.chars().count() as u16)
+        .saturating_sub(1);
+
+    if column == arrow_left {
+        Some(TimetableTitleClickTarget::PrevWeek)
+    } else if column == arrow_right {
+        Some(TimetableTitleClickTarget::NextWeek)
+    } else {
+        None
+    }
 }
 
 fn build_timetable_grid_lines(
@@ -284,7 +315,7 @@ fn build_timetable_grid_lines(
     day_width: u16,
     total_width: u16,
     scroll_offset: usize,
-    visible_periods: &[(usize, &TimeUnit)]
+    visible_periods: &[(usize, &TimeUnit)],
 ) -> Vec<Line<'static>> {
     let mut color_map = HashMap::<String, Color>::new();
     let mut lines = Vec::new();
@@ -292,20 +323,20 @@ fn build_timetable_grid_lines(
     let today_idx = data.days.iter().position(|day| day.date == today);
     let current_period_idx = find_current_period_index(&data.timegrid);
 
-    lines.push(build_day_header_line(data, compact, time_width, day_width, today_idx));
-    lines.push(
-        Line::from(
-            Span::styled(
-                build_grid_divider(time_width, day_width, DAY_COUNT, "┼", total_width),
-                Style::default().fg(DIM_GRAY)
-            )
-        )
-    );
+    lines.push(build_day_header_line(
+        data, compact, time_width, day_width, today_idx,
+    ));
+    lines.push(Line::from(Span::styled(
+        build_grid_divider(time_width, day_width, DAY_COUNT, "┼", total_width),
+        Style::default().fg(DIM_GRAY),
+    )));
 
     if scroll_offset > 0 {
-        lines.push(
-            build_scroll_hint_line(time_width, day_width, &format!("▲ {scroll_offset} more ▲"))
-        );
+        lines.push(build_scroll_hint_line(
+            time_width,
+            day_width,
+            &format!("▲ {scroll_offset} more ▲"),
+        ));
     }
 
     for (period_idx, period) in visible_periods {
@@ -319,16 +350,21 @@ fn build_timetable_grid_lines(
             time_width,
             day_width,
             current_period_idx,
-            &mut color_map
+            &mut color_map,
         );
         lines.extend(row_lines);
     }
 
-    let hidden_below = data.timegrid.len().saturating_sub(scroll_offset + visible_periods.len());
+    let hidden_below = data
+        .timegrid
+        .len()
+        .saturating_sub(scroll_offset + visible_periods.len());
     if hidden_below > 0 {
-        lines.push(
-            build_scroll_hint_line(time_width, day_width, &format!("▼ {hidden_below} more ▼"))
-        );
+        lines.push(build_scroll_hint_line(
+            time_width,
+            day_width,
+            &format!("▼ {hidden_below} more ▼"),
+        ));
     }
 
     lines
@@ -339,32 +375,32 @@ fn build_day_header_line(
     compact: bool,
     time_width: u16,
     day_width: u16,
-    today_idx: Option<usize>
+    today_idx: Option<usize>,
 ) -> Line<'static> {
-    let mut spans = vec![
-        Span::styled(
-            pad_with_margin("Time", time_width),
-            Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD)
-        )
-    ];
+    let mut spans = vec![Span::styled(
+        pad_with_margin("Time", time_width),
+        Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD),
+    )];
 
     for (index, day) in data.days.iter().take(DAY_COUNT).enumerate() {
         spans.push(Span::styled("│", Style::default().fg(DIM_GRAY)));
-        spans.push(
-            Span::styled(
-                center_text(
-                    if compact {
-                        &day.day_name[..day.day_name.len().min(2)]
-                    } else {
-                        &day.day_name[..day.day_name.len().min(3)]
-                    },
-                    day_width.saturating_sub(1)
-                ),
-                Style::default()
-                    .fg(if Some(index) == today_idx { BRAND } else { BRIGHT_WHITE })
-                    .add_modifier(Modifier::BOLD)
-            )
-        );
+        spans.push(Span::styled(
+            center_text(
+                if compact {
+                    &day.day_name[..day.day_name.len().min(2)]
+                } else {
+                    &day.day_name[..day.day_name.len().min(3)]
+                },
+                day_width.saturating_sub(1),
+            ),
+            Style::default()
+                .fg(if Some(index) == today_idx {
+                    BRAND
+                } else {
+                    BRIGHT_WHITE
+                })
+                .add_modifier(Modifier::BOLD),
+        ));
     }
 
     Line::from(spans)
@@ -374,16 +410,14 @@ fn build_scroll_hint_line(time_width: u16, day_width: u16, label: &str) -> Line<
     let mut spans = vec![Span::raw(" ".repeat(usize::from(time_width)))];
     for day_idx in 0..DAY_COUNT {
         spans.push(Span::styled("│", Style::default().fg(DIM_GRAY)));
-        spans.push(
-            Span::styled(
-                if day_idx == 2 {
-                    center_text(label, day_width.saturating_sub(1))
-                } else {
-                    " ".repeat(usize::from(day_width.saturating_sub(1)))
-                },
-                Style::default().fg(DIM_GRAY)
-            )
-        );
+        spans.push(Span::styled(
+            if day_idx == 2 {
+                center_text(label, day_width.saturating_sub(1))
+            } else {
+                " ".repeat(usize::from(day_width.saturating_sub(1)))
+            },
+            Style::default().fg(DIM_GRAY),
+        ));
     }
     Line::from(spans)
 }
@@ -398,7 +432,7 @@ fn build_period_row_lines(
     time_width: u16,
     day_width: u16,
     current_period_idx: Option<usize>,
-    color_map: &mut HashMap<String, Color>
+    color_map: &mut HashMap<String, Color>,
 ) -> Vec<Line<'static>> {
     let mut row_spans = vec![Vec::<Span>::new(), Vec::<Span>::new(), Vec::<Span>::new()];
     let time_lines = build_time_column_lines(
@@ -406,7 +440,7 @@ fn build_period_row_lines(
         compact,
         time_width,
         period_idx == state.main.timetable.selected_period_idx,
-        current_period_idx == Some(period_idx)
+        current_period_idx == Some(period_idx),
     );
     for line_idx in 0..GRID_ROW_HEIGHT as usize {
         row_spans[line_idx].extend(time_lines[line_idx].clone());
@@ -417,12 +451,12 @@ fn build_period_row_lines(
 
     for day_idx in 0..DAY_COUNT {
         let lessons = lessons_for_period(model, &data.timegrid, day_idx, period_idx);
-        let overlay = model.overlay_index_by_day
+        let overlay = model
+            .overlay_index_by_day
             .get(day_idx)
             .and_then(|day_overlay| day_overlay.get(&period.start_time));
-        let is_anchor_focused =
-            day_idx == state.main.timetable.selected_day_idx &&
-            period_idx == state.main.timetable.selected_period_idx;
+        let is_anchor_focused = day_idx == state.main.timetable.selected_day_idx
+            && period_idx == state.main.timetable.selected_period_idx;
         let selected_entry = if is_anchor_focused {
             lessons.get(state.main.timetable.selected_lesson_idx)
         } else {
@@ -439,7 +473,11 @@ fn build_period_row_lines(
                 lessons.first()
             };
             let label = if let Some(entry) = preview_entry {
-                format!("{} +{}", entry.lesson.subject, lessons.len().saturating_sub(1))
+                format!(
+                    "{} +{}",
+                    entry.lesson.subject,
+                    lessons.len().saturating_sub(1)
+                )
             } else {
                 format!("{}x", lessons.len())
             };
@@ -450,7 +488,7 @@ fn build_period_row_lines(
                 subject_stripe_color(&lessons[0].lesson.subject, color_map),
                 is_anchor_focused,
                 cell_width,
-                None
+                None,
             )
         };
 
@@ -468,7 +506,7 @@ fn build_time_column_lines(
     compact: bool,
     time_width: u16,
     is_focused: bool,
-    is_current: bool
+    is_current: bool,
 ) -> [Vec<Span<'static>>; 3] {
     let label_width = usize::from(time_width.saturating_sub(2));
     let period_label = truncate_text(&period.name, if compact { 8 } else { 12 });
@@ -479,22 +517,22 @@ fn build_time_column_lines(
     );
 
     [
-        vec![
-            Span::styled(
-                pad_with_margin(&period_label, time_width),
-                Style::default()
-                    .fg(if is_current { BRAND } else { WARNING })
-                    .add_modifier(Modifier::BOLD)
-            )
-        ],
-        vec![
-            Span::styled(
-                format!(" {} ", fit_text(&time_label, label_width)),
-                Style::default()
-                    .bg(if is_focused { ALT_BG } else { Color::Reset })
-                    .fg(if is_focused { BRIGHT_WHITE } else { Color::Reset })
-            )
-        ],
+        vec![Span::styled(
+            pad_with_margin(&period_label, time_width),
+            Style::default()
+                .fg(if is_current { BRAND } else { WARNING })
+                .add_modifier(Modifier::BOLD),
+        )],
+        vec![Span::styled(
+            format!(" {} ", fit_text(&time_label, label_width)),
+            Style::default()
+                .bg(if is_focused { ALT_BG } else { Color::Reset })
+                .fg(if is_focused {
+                    BRIGHT_WHITE
+                } else {
+                    Color::Reset
+                }),
+        )],
         vec![Span::raw(" ".repeat(usize::from(time_width)))],
     ]
 }
@@ -503,15 +541,24 @@ fn build_empty_cell_lines(is_focused: bool, width: u16) -> [Vec<Span<'static>>; 
     let content_width = usize::from(width);
     if is_focused {
         return [
-            vec![Span::styled(" ".repeat(content_width), Style::default().bg(ALT_BG).fg(BLACK))],
-            vec![Span::styled(" ".repeat(content_width), Style::default().bg(ALT_BG).fg(BLACK))],
+            vec![Span::styled(
+                " ".repeat(content_width),
+                Style::default().bg(ALT_BG).fg(BLACK),
+            )],
+            vec![Span::styled(
+                " ".repeat(content_width),
+                Style::default().bg(ALT_BG).fg(BLACK),
+            )],
             vec![Span::raw(" ".repeat(content_width))],
         ];
     }
 
     [
         vec![Span::raw(" ".repeat(content_width))],
-        vec![Span::styled(center_text(".", width), Style::default().fg(DIM_GRAY))],
+        vec![Span::styled(
+            center_text(".", width),
+            Style::default().fg(DIM_GRAY),
+        )],
         vec![Span::raw(" ".repeat(content_width))],
     ]
 }
@@ -519,16 +566,14 @@ fn build_empty_cell_lines(is_focused: bool, width: u16) -> [Vec<Span<'static>>; 
 fn build_overlap_preview_lines(
     label: &str,
     is_focused: bool,
-    width: u16
+    width: u16,
 ) -> [Vec<Span<'static>>; 3] {
     [
         vec![Span::raw(" ".repeat(usize::from(width)))],
-        vec![
-            Span::styled(
-                center_text(label, width),
-                Style::default().fg(if is_focused { WARNING } else { BRIGHT_WHITE })
-            )
-        ],
+        vec![Span::styled(
+            center_text(label, width),
+            Style::default().fg(if is_focused { WARNING } else { BRIGHT_WHITE }),
+        )],
         vec![Span::raw(" ".repeat(usize::from(width)))],
     ]
 }
@@ -537,7 +582,7 @@ fn build_split_cell_lines(
     overlay: &crate::timetable_model::OverlayPeriod,
     selected_entry: Option<&crate::timetable_model::RenderLesson>,
     width: u16,
-    color_map: &mut HashMap<String, Color>
+    color_map: &mut HashMap<String, Color>,
 ) -> [Vec<Span<'static>>; 3] {
     let split_gap_width = 1u16;
     let left_lane_width = width.saturating_sub(split_gap_width) / 2;
@@ -565,7 +610,7 @@ fn build_split_cell_lines(
             subject_stripe_color(&entry.lesson.subject, color_map),
             left_focused,
             left_lane_width,
-            left_suffix.as_deref()
+            left_suffix.as_deref(),
         )
     } else {
         build_blank_lane_lines(left_lane_width)
@@ -580,7 +625,7 @@ fn build_split_cell_lines(
                 left_suffix.as_deref()
             } else {
                 None
-            }
+            },
         )
     } else {
         build_blank_lane_lines(right_lane_width)
@@ -609,10 +654,16 @@ fn build_lesson_lane_lines(
     stripe_color: Color,
     is_focused: bool,
     width: u16,
-    title_suffix: Option<&str>
+    title_suffix: Option<&str>,
 ) -> [Vec<Span<'static>>; 3] {
-    let starts_here = matches!(entry.continuation, Continuation::Single | Continuation::Start);
-    let continues_down = matches!(entry.continuation, Continuation::Start | Continuation::Middle);
+    let starts_here = matches!(
+        entry.continuation,
+        Continuation::Single | Continuation::Start
+    );
+    let continues_down = matches!(
+        entry.continuation,
+        Continuation::Start | Continuation::Middle
+    );
     let lesson = &entry.lesson;
     let title = if starts_here {
         match title_suffix {
@@ -653,7 +704,7 @@ fn build_lesson_lane_lines(
             colors.main_fg,
             content_width,
             starts_here,
-            lesson.cancelled && starts_here
+            lesson.cancelled && starts_here,
         ),
         styled_stripe_line(
             "▍",
@@ -663,7 +714,7 @@ fn build_lesson_lane_lines(
             colors.subtext_fg,
             content_width,
             false,
-            false
+            false,
         ),
         if continues_down {
             styled_stripe_line(
@@ -674,15 +725,15 @@ fn build_lesson_lane_lines(
                 colors.continuation_fg,
                 content_width,
                 false,
-                false
+                false,
             )
         } else {
             [
                 Span::styled(" ", Style::default().fg(stripe_color)),
                 Span::raw(" ".repeat(usize::from(content_width))),
             ]
-                .into_iter()
-                .collect()
+            .into_iter()
+            .collect()
         },
     ]
 }
@@ -695,7 +746,7 @@ fn styled_stripe_line(
     foreground: Color,
     content_width: u16,
     bold: bool,
-    strikethrough: bool
+    strikethrough: bool,
 ) -> Vec<Span<'static>> {
     let mut text_style = Style::default().bg(background).fg(foreground);
     if bold {
@@ -706,31 +757,37 @@ fn styled_stripe_line(
     }
 
     vec![
-        Span::styled(stripe.to_owned(), Style::default().bg(background).fg(stripe_color)),
-        Span::styled(fit_text(text, usize::from(content_width)), text_style)
+        Span::styled(
+            stripe.to_owned(),
+            Style::default().bg(background).fg(stripe_color),
+        ),
+        Span::styled(fit_text(text, usize::from(content_width)), text_style),
     ]
 }
 
 fn build_timetable_details(
     state: &AppState,
     width: u16,
-    divider: Option<String>
+    divider: Option<String>,
 ) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     if let Some(divider_line) = divider {
-        lines.push(
-            Line::from(
-                Span::styled(
-                    fit_text(divider_line.as_str(), usize::from(width)),
-                    Style::default().fg(DIM_GRAY)
-                )
-            )
-        );
+        lines.push(Line::from(Span::styled(
+            fit_text(divider_line.as_str(), usize::from(width)),
+            Style::default().fg(DIM_GRAY),
+        )));
     }
+    lines.push(Line::from(Span::styled(
+        "Details",
+        Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD),
+    )));
 
     if let Some(lesson) = state.selected_timetable_lesson() {
         let overlaps = state.current_timetable_lessons().len();
-        let overlap_position = state.main.timetable.data
+        let overlap_position = state
+            .main
+            .timetable
+            .data
             .as_ref()
             .map(|data| {
                 let model = build_render_model(data, 2);
@@ -739,12 +796,11 @@ fn build_timetable_details(
                     data,
                     state.main.timetable.selected_day_idx,
                     state.main.timetable.selected_period_idx,
-                    state.main.timetable.selected_lesson_idx
+                    state.main.timetable.selected_lesson_idx,
                 )
             })
             .unwrap_or(state.main.timetable.selected_lesson_idx + 1);
 
-        let teacher_label = if lesson.all_teachers.len() > 1 { "Teachers" } else { "Teacher" };
         let classes = lesson.all_classes.clone();
         let room_short = lesson.room.as_str();
         let room_long = lesson.room_long_name.as_str();
@@ -760,114 +816,82 @@ fn build_timetable_details(
             let badge_width = UnicodeWidthStr::width(padded_badge.as_str());
             let left_title = truncate_text(
                 title.as_str(),
-                usize::from(width).saturating_sub(badge_width + 1)
+                usize::from(width).saturating_sub(badge_width + 1),
             );
-            lines.push(
-                Line::from(
-                    vec![
-                        Span::styled(left_title, title_left_style),
-                        Span::raw(" "),
-                        Span::styled(padded_badge, badge_style)
-                    ]
-                )
-            );
+            lines.push(Line::from(vec![
+                Span::styled(left_title, title_left_style),
+                Span::raw(" "),
+                Span::styled(padded_badge, badge_style),
+            ]));
         } else {
-            lines.push(
-                Line::from(
-                    Span::styled(
-                        truncate_text(title.as_str(), usize::from(width)),
-                        title_left_style
-                    )
-                )
-            );
+            lines.push(Line::from(Span::styled(
+                truncate_text(title.as_str(), usize::from(width)),
+                title_left_style,
+            )));
         }
-        lines.push(
-            Line::from(
-                vec![
-                    Span::styled(
-                        truncate_text(time.as_str(), usize::from(width.saturating_sub(2))),
-                        title_right_style
-                    )
-                ]
-            )
-        );
+        lines.push(Line::from(vec![Span::styled(
+            truncate_text(time.as_str(), usize::from(width.saturating_sub(2))),
+            title_right_style,
+        )]));
 
-        let mut teacher_spans = vec![
-            Span::styled(format!("{} · ", teacher_label), Style::default().fg(DIM_GRAY))
-        ];
+        let mut teacher_spans = vec![Span::styled("Teachers: ", Style::default().fg(DIM_GRAY))];
         teacher_spans.extend(build_teacher_spans(&lesson));
         lines.push(Line::from(teacher_spans));
-        lines.push(
-            Line::from(
-                vec![
-                    Span::styled("Room · ", Style::default().fg(DIM_GRAY)),
-                    Span::styled(
-                        (if room_short.is_empty() { "N/A" } else { room_short }).to_owned(),
-                        Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
-                    ),
-                    if !room_short.is_empty() && !room_long.is_empty() && room_long != room_short {
-                        Span::raw(format!(" ({room_long})"))
-                    } else {
-                        Span::raw(String::new())
-                    }
-                ]
-            )
-        );
-        lines.push(
-            Line::from({
-                let mut class_spans = vec![
-                    Span::styled("Classes · ", Style::default().fg(DIM_GRAY))
-                ];
-                class_spans.extend(build_class_value_spans(&classes));
-                class_spans
-            })
-        );
+        lines.push(Line::from(vec![
+            Span::styled("Room · ", Style::default().fg(DIM_GRAY)),
+            Span::styled(
+                (if room_short.is_empty() {
+                    "N/A"
+                } else {
+                    room_short
+                })
+                .to_owned(),
+                Style::default()
+                    .fg(BRIGHT_WHITE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            if !room_short.is_empty() && !room_long.is_empty() && room_long != room_short {
+                Span::raw(format!(" ({room_long})"))
+            } else {
+                Span::raw(String::new())
+            },
+        ]));
+        lines.push(Line::from({
+            let mut class_spans = vec![Span::styled("Classes · ", Style::default().fg(DIM_GRAY))];
+            class_spans.extend(build_class_value_spans(&classes));
+            class_spans
+        }));
         if overlaps > 1 {
-            lines.push(
-                Line::from(
-                    Span::styled(
-                        format!("Overlap {overlap_position}/{overlaps}"),
-                        Style::default().fg(WARNING).add_modifier(Modifier::DIM)
-                    )
-                )
-            );
+            lines.push(Line::from(Span::styled(
+                format!("Overlap {overlap_position}/{overlaps}"),
+                Style::default().fg(WARNING).add_modifier(Modifier::DIM),
+            )));
         }
         if !lesson.lesson_text.is_empty() {
-            lines.push(
-                Line::from(
-                    vec![
-                        Span::styled("Lesson text · ", Style::default().fg(DIM_GRAY)),
-                        Span::raw(
-                            truncate_text(
-                                lesson.lesson_text.as_str(),
-                                usize::from(width.saturating_sub(14))
-                            )
-                        )
-                    ]
-                )
-            );
+            lines.push(Line::from(vec![
+                Span::styled("Lesson text · ", Style::default().fg(DIM_GRAY)),
+                Span::raw(truncate_text(
+                    lesson.lesson_text.as_str(),
+                    usize::from(width.saturating_sub(14)),
+                )),
+            ]));
         }
         if !lesson.remarks.is_empty() {
-            lines.push(
-                Line::from(
-                    Span::styled(
-                        format!(
-                            "i {}",
-                            fit_text(lesson.remarks.as_str(), usize::from(width.saturating_sub(2)))
-                        ),
-                        Style::default().fg(INFO).add_modifier(Modifier::ITALIC)
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "i {}",
+                    fit_text(
+                        lesson.remarks.as_str(),
+                        usize::from(width.saturating_sub(2))
                     )
-                )
-            );
+                ),
+                Style::default().fg(INFO).add_modifier(Modifier::ITALIC),
+            )));
         } else if lesson.cancelled {
-            lines.push(
-                Line::from(
-                    Span::styled(
-                        "CANCELLED",
-                        Style::default().fg(ERROR).add_modifier(Modifier::BOLD)
-                    )
-                )
-            );
+            lines.push(Line::from(Span::styled(
+                "CANCELLED",
+                Style::default().fg(ERROR).add_modifier(Modifier::BOLD),
+            )));
         } else if overlaps > 1 {
             let siblings = state
                 .current_timetable_lessons()
@@ -886,21 +910,17 @@ fn build_timetable_details(
                     also_spans.push(Span::styled(entry.subject, Style::default().fg(DIM_GRAY)));
                     if !entry.room.is_empty() {
                         also_spans.push(Span::raw(" "));
-                        also_spans.push(
-                            Span::styled(
-                                entry.room,
-                                Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD)
-                            )
-                        );
+                        also_spans.push(Span::styled(
+                            entry.room,
+                            Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD),
+                        ));
                     }
                     if !entry.teacher.is_empty() {
                         also_spans.push(Span::raw(" "));
-                        also_spans.push(
-                            Span::styled(
-                                entry.teacher,
-                                Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD)
-                            )
-                        );
+                        also_spans.push(Span::styled(
+                            entry.teacher,
+                            Style::default().fg(DIM_GRAY).add_modifier(Modifier::BOLD),
+                        ));
                     }
                 }
                 lines.push(Line::from(also_spans));
@@ -908,9 +928,10 @@ fn build_timetable_details(
         }
         return lines;
     }
-    lines.push(
-        Line::from(Span::styled("Select a lesson to see details.", Style::default().fg(DIM_GRAY)))
-    );
+    lines.push(Line::from(Span::styled(
+        "Select a lesson to see details.",
+        Style::default().fg(DIM_GRAY),
+    )));
     lines
 }
 
@@ -919,18 +940,23 @@ fn lesson_type_badge(lesson: &ParsedLesson) -> Option<(String, Style)> {
     if lesson.cancelled || cell_state == "CANCELLED" {
         return Some((
             "CANCELLED".to_owned(),
-            Style::default().bg(LESSON_CANCELLED_BG).fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD),
+            Style::default()
+                .bg(LESSON_CANCELLED_BG)
+                .fg(BRIGHT_WHITE)
+                .add_modifier(Modifier::BOLD),
         ));
     }
     if cell_state == "EXAM" {
         return Some((
             "EXAM".to_owned(),
-            Style::default().bg(LESSON_EXAM_BG).fg(BLACK).add_modifier(Modifier::BOLD),
+            Style::default()
+                .bg(LESSON_EXAM_BG)
+                .fg(BLACK)
+                .add_modifier(Modifier::BOLD),
         ));
     }
-    if
-        lesson.substitution ||
-        matches!(
+    if lesson.substitution
+        || matches!(
             cell_state.as_str(),
             "SUBSTITUTION" | "ADDITIONAL" | "ROOMSUBSTITUTION" | "ROOMSUBSTITION" | "CONFIRMED"
         )
@@ -953,7 +979,10 @@ fn lesson_type_badge(lesson: &ParsedLesson) -> Option<(String, Style)> {
 
     Some((
         "STANDARD".to_owned(),
-        Style::default().bg(LESSON_DEFAULT_BG).fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD),
+        Style::default()
+            .bg(LESSON_DEFAULT_BG)
+            .fg(BRIGHT_WHITE)
+            .add_modifier(Modifier::BOLD),
     ))
 }
 
@@ -965,13 +994,17 @@ fn build_teacher_spans(lesson: &ParsedLesson) -> Vec<Span<'static>> {
             if index > 0 {
                 spans.push(Span::raw(", "));
             }
-            let long_name = lesson.all_teacher_long_names.get(index).cloned().unwrap_or_default();
-            spans.push(
-                Span::styled(
-                    short_name.clone(),
-                    Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
-                )
-            );
+            let long_name = lesson
+                .all_teacher_long_names
+                .get(index)
+                .cloned()
+                .unwrap_or_default();
+            spans.push(Span::styled(
+                short_name.clone(),
+                Style::default()
+                    .fg(BRIGHT_WHITE)
+                    .add_modifier(Modifier::BOLD),
+            ));
             if !long_name.is_empty() && long_name != *short_name {
                 spans.push(Span::raw(format!(" ({long_name})")));
             }
@@ -985,12 +1018,12 @@ fn build_teacher_spans(lesson: &ParsedLesson) -> Vec<Span<'static>> {
         } else {
             lesson.teacher.clone()
         };
-        spans.push(
-            Span::styled(
-                short_name.clone(),
-                Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
-            )
-        );
+        spans.push(Span::styled(
+            short_name.clone(),
+            Style::default()
+                .fg(BRIGHT_WHITE)
+                .add_modifier(Modifier::BOLD),
+        ));
         if !lesson.teacher_long_name.is_empty() && lesson.teacher_long_name != short_name {
             spans.push(Span::raw(format!(" ({})", lesson.teacher_long_name)));
         }
@@ -1011,12 +1044,12 @@ fn build_class_value_spans(classes: &[String]) -> Vec<Span<'static>> {
         if index > 0 {
             spans.push(Span::raw(", "));
         }
-        spans.push(
-            Span::styled(
-                class_name.clone(),
-                Style::default().fg(BRIGHT_WHITE).add_modifier(Modifier::BOLD)
-            )
-        );
+        spans.push(Span::styled(
+            class_name.clone(),
+            Style::default()
+                .fg(BRIGHT_WHITE)
+                .add_modifier(Modifier::BOLD),
+        ));
     }
     spans
 }
@@ -1026,7 +1059,7 @@ fn build_grid_divider(
     day_width: u16,
     day_count: usize,
     junction: &str,
-    total_width: u16
+    total_width: u16,
 ) -> String {
     let mut line = "─".repeat(usize::from(time_width));
     for _ in 0..day_count {
@@ -1082,9 +1115,8 @@ struct LessonColors {
 
 fn lesson_colors(lesson: &ParsedLesson, is_focused: bool) -> LessonColors {
     let cell_state = lesson.cell_state.trim().to_uppercase();
-    let is_substitution_like =
-        lesson.substitution ||
-        matches!(
+    let is_substitution_like = lesson.substitution
+        || matches!(
             cell_state.as_str(),
             "SUBSTITUTION" | "ADDITIONAL" | "ROOMSUBSTITUTION" | "ROOMSUBSTITION"
         );

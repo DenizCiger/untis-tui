@@ -7,6 +7,7 @@ use super::theme::{
     WARNING,
 };
 use crate::app::state::AppState;
+use crate::timetable_model::SHELL_HEADER_HEIGHT;
 use chrono::Datelike;
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -21,6 +22,19 @@ struct AbsenceStatusMeta {
     long_label: &'static str,
     chip_bg: Color,
     chip_fg: Color,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AbsenceLayoutGeometry {
+    pub history_area: Rect,
+    pub history_inner: Rect,
+    pub visible_start: usize,
+    pub visible_rows: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AbsenceClickTarget {
+    pub selected_idx: usize,
 }
 
 pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
@@ -203,6 +217,107 @@ pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         &oldest_loaded,
     );
     render_absence_details_pane(frame, details_area, selected);
+}
+
+pub(crate) fn absence_layout_geometry(
+    terminal_width: u16,
+    terminal_height: u16,
+    filtered_len: usize,
+    selected_idx: usize,
+) -> AbsenceLayoutGeometry {
+    let area = Rect {
+        x: 0,
+        y: SHELL_HEADER_HEIGHT,
+        width: terminal_width,
+        height: terminal_height.saturating_sub(SHELL_HEADER_HEIGHT),
+    };
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let history_area = if area.width >= 118 {
+        let body = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(((f32::from(layout[4].width) * 0.6).floor() as u16).max(56)),
+                Constraint::Min(28),
+            ])
+            .split(layout[4]);
+        body[0]
+    } else {
+        let summary_height = layout[4].height.saturating_sub(5).max(4).min(5);
+        let stacked = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(58),
+                Constraint::Length(summary_height),
+                Constraint::Min(5),
+            ])
+            .split(layout[4]);
+        stacked[0]
+    };
+
+    let history_inner = Rect {
+        x: history_area.x.saturating_add(1),
+        y: history_area.y.saturating_add(1),
+        width: history_area.width.saturating_sub(2),
+        height: history_area.height.saturating_sub(2),
+    };
+    let list_rows = usize::from(history_inner.height).saturating_sub(2).max(3);
+    let visible_start = std::cmp::min(
+        selected_idx.saturating_sub(list_rows.saturating_div(2)),
+        filtered_len.saturating_sub(list_rows),
+    );
+    let visible_rows = filtered_len.saturating_sub(visible_start).min(list_rows);
+
+    AbsenceLayoutGeometry {
+        history_area,
+        history_inner,
+        visible_start,
+        visible_rows,
+    }
+}
+
+pub(crate) fn hit_test_absence_history_click(
+    terminal_width: u16,
+    terminal_height: u16,
+    filtered_len: usize,
+    selected_idx: usize,
+    column: u16,
+    row: u16,
+) -> Option<AbsenceClickTarget> {
+    let geometry =
+        absence_layout_geometry(terminal_width, terminal_height, filtered_len, selected_idx);
+
+    if geometry.history_inner.width == 0 || geometry.history_inner.height == 0 {
+        return None;
+    }
+    if column < geometry.history_inner.x
+        || column
+            >= geometry
+                .history_inner
+                .x
+                .saturating_add(geometry.history_inner.width)
+    {
+        return None;
+    }
+
+    let body_start_y = geometry.history_inner.y.saturating_add(1);
+    let body_end_y = body_start_y.saturating_add(geometry.visible_rows as u16);
+    if row < body_start_y || row >= body_end_y {
+        return None;
+    }
+
+    Some(AbsenceClickTarget {
+        selected_idx: geometry.visible_start + usize::from(row.saturating_sub(body_start_y)),
+    })
 }
 
 fn absence_status_meta(is_excused: bool) -> AbsenceStatusMeta {
