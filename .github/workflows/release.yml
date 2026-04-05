@@ -39,7 +39,7 @@ jobs:
             packaged_binary_name: untis.exe
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Upload release artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.6.1
         with:
           files: |
             untis-${{ matrix.target }}.${{ matrix.archive }}
