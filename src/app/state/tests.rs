@@ -1,6 +1,6 @@
 use super::*;
-use crate::models::{Config, TimeUnit, today_local};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::models::{ Config, ParsedAbsence, TimeUnit, add_days, today_local };
+use crossterm::event::{ KeyCode, KeyEvent, KeyModifiers };
 
 fn sample_config() -> Config {
     Config {
@@ -11,27 +11,38 @@ fn sample_config() -> Config {
     }
 }
 
+fn sample_absence(id: i64, start_date: chrono::NaiveDate) -> ParsedAbsence {
+    ParsedAbsence {
+        id,
+        student_name: "user".into(),
+        reason: "Reason".into(),
+        text: String::new(),
+        excuse_status: String::new(),
+        is_excused: false,
+        start_date,
+        end_date: start_date,
+        start_time: "08:00".into(),
+        end_time: "08:50".into(),
+    }
+}
+
 #[test]
 fn bootstrap_with_saved_password_enters_main_shell() {
     let mut state = AppState::new();
-    let commands = state.handle_worker_event(WorkerEvent::BootstrapLoaded(BootstrapPayload {
-        saved_config: Some(sample_config().saved()),
-        saved_password: Some("secret".into()),
-        secure_storage_notice: String::new(),
-    }));
+    let commands = state.handle_worker_event(
+        WorkerEvent::BootstrapLoaded(BootstrapPayload {
+            saved_config: Some(sample_config().saved()),
+            saved_password: Some("secret".into()),
+            secure_storage_notice: String::new(),
+        })
+    );
 
     assert_eq!(state.screen, Screen::MainShell);
     assert!(state.config.is_some());
     assert!(
-        commands
-            .iter()
-            .any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
+        commands.iter().any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
     );
-    assert!(
-        commands
-            .iter()
-            .any(|command| matches!(command, AppCommand::LoadAbsenceChunk { .. }))
-    );
+    assert!(commands.iter().any(|command| matches!(command, AppCommand::LoadAbsenceChunk { .. })));
 }
 
 #[test]
@@ -79,17 +90,77 @@ fn initial_empty_absence_chunk_triggers_background_prefetch() {
         }),
     });
 
-    assert!(commands.iter().any(|command| matches!(
-        command,
-        AppCommand::LoadAbsenceChunk {
-            generation: 1,
-            chunk_index: 1,
-            is_initial: false,
-            ..
-        }
-    )));
+    assert!(
+        commands.iter().any(|command|
+            matches!(command, AppCommand::LoadAbsenceChunk {
+                generation: 1,
+                chunk_index: 1,
+                is_initial: false,
+                ..
+            })
+        )
+    );
     assert!(state.main.absences.loading_more);
     assert!(!state.main.absences.loading_initial);
+}
+
+#[test]
+fn loading_more_absences_keeps_initial_newest_chunk() {
+    let mut state = AppState::new();
+    state.config = Some(sample_config());
+    state.main.absences.generation = 1;
+    state.main.absences.loading_initial = true;
+    state.main.absences.has_more = true;
+
+    let newest_date = today_local();
+    let next_date = add_days(newest_date, -1);
+    let older_date = add_days(newest_date, -45);
+    let oldest_date = add_days(newest_date, -46);
+
+    let commands = state.handle_worker_event(WorkerEvent::AbsencesLoaded {
+        generation: 1,
+        is_initial: true,
+        result: Ok(AbsenceChunkPayload {
+            items: vec![sample_absence(100, newest_date), sample_absence(99, next_date)],
+            next_chunk_index: 1,
+            empty_chunk_streak: 0,
+            has_more: true,
+            days_loaded: 45,
+        }),
+    });
+
+    assert!(
+        commands.iter().any(|command|
+            matches!(command, AppCommand::LoadAbsenceChunk {
+                generation: 1,
+                chunk_index: 1,
+                is_initial: false,
+                ..
+            })
+        )
+    );
+    assert_eq!(state.main.absences.absences.len(), 2);
+    assert_eq!(state.main.absences.absences[0].id, 100);
+    assert_eq!(state.main.absences.absences[1].id, 99);
+
+    let follow_up = state.handle_worker_event(WorkerEvent::AbsencesLoaded {
+        generation: 1,
+        is_initial: false,
+        result: Ok(AbsenceChunkPayload {
+            items: vec![sample_absence(80, older_date), sample_absence(79, oldest_date)],
+            next_chunk_index: 4,
+            empty_chunk_streak: 0,
+            has_more: false,
+            days_loaded: 180,
+        }),
+    });
+
+    assert!(follow_up.is_empty());
+    assert_eq!(state.main.absences.absences.len(), 4);
+    assert_eq!(state.main.absences.absences[0].id, 100);
+    assert_eq!(state.main.absences.absences[1].id, 99);
+    assert_eq!(state.main.absences.absences[2].id, 80);
+    assert_eq!(state.main.absences.absences[3].id, 79);
 }
 
 #[test]
@@ -139,7 +210,7 @@ fn timetable_period_index_repeats_multi_period_lessons() {
                 date: today_local(),
                 day_name: "Friday".into(),
                 lessons: Vec::new(),
-            },
+            }
         ],
         timegrid: vec![
             TimeUnit {
@@ -151,7 +222,7 @@ fn timetable_period_index_repeats_multi_period_lessons() {
                 name: "2".into(),
                 start_time: "08:50".into(),
                 end_time: "09:40".into(),
-            },
+            }
         ],
     });
     assert_eq!(state.timetable_lessons_for(0, 0).len(), 1);

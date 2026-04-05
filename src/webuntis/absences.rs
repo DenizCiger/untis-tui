@@ -1,30 +1,20 @@
 use super::auth::UntisSession;
-use super::client::{WebUntisClient, WebUntisError};
-use crate::models::{Config, ParsedAbsence, format_untis_date, format_untis_time, parse_untis_date};
+use super::client::{ WebUntisClient, WebUntisError };
+use crate::models::{
+    Config,
+    ParsedAbsence,
+    format_untis_date,
+    format_untis_time,
+    parse_untis_date,
+};
 use chrono::NaiveDate;
 use reqwest::header::COOKIE;
-use serde::Deserialize;
+use serde::{ Deserialize, Deserializer };
 
 #[derive(Debug, Deserialize)]
 pub(super) struct AbsencesPayload {
     #[serde(default)]
     pub(super) absences: Vec<RawAbsence>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum AbsencesResponse {
-    Wrapped { data: AbsencesPayload },
-    Flat(AbsencesPayload),
-}
-
-impl AbsencesResponse {
-    fn into_payload(self) -> AbsencesPayload {
-        match self {
-            Self::Wrapped { data } => data,
-            Self::Flat(data) => data,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,13 +25,13 @@ pub(super) struct RawAbsence {
     pub(super) end_date: i32,
     pub(super) start_time: i32,
     pub(super) end_time: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_default")]
     pub(super) student_name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_default")]
     pub(super) reason: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_default")]
     pub(super) text: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_default")]
     pub(super) excuse_status: String,
     #[serde(default)]
     pub(super) is_excused: bool,
@@ -52,31 +42,54 @@ impl WebUntisClient {
         &self,
         session: &UntisSession,
         range_start: NaiveDate,
-        range_end: NaiveDate,
+        range_end: NaiveDate
     ) -> Result<AbsencesPayload, WebUntisError> {
-        let response = self
-            .client
+        let response = self.client
             .get(self.url("/WebUntis/api/classreg/absences/students"))
             .header(COOKIE, self.cookie_header(session))
-            .query(&[
-                ("startDate", format_untis_date(range_start)),
-                ("endDate", format_untis_date(range_end)),
-                ("studentId", session.person_id.to_string()),
-                ("excuseStatusId", "-1".to_owned()),
-            ])
-            .send()
-            .await?;
-        response
-            .json::<AbsencesResponse>()
-            .await
-            .map(AbsencesResponse::into_payload)
-            .map_err(Into::into)
+            .query(
+                &[
+                    ("startDate", format_untis_date(range_start)),
+                    ("endDate", format_untis_date(range_end)),
+                    ("studentId", session.person_id.to_string()),
+                    ("excuseStatusId", "-1".to_owned()),
+                ]
+            )
+            .send().await?;
+        let raw = response.text().await?;
+        extract_absence_payload(&raw)
     }
 }
 
+pub(super) fn extract_absence_payload(raw: &str) -> Result<AbsencesPayload, WebUntisError> {
+    let value: serde_json::Value = serde_json
+        ::from_str(raw)
+        .map_err(|error|
+            WebUntisError::Message(format!("Failed to parse absences response: {error}"))
+        )?;
+
+    let absences = value
+        .get("data")
+        .and_then(|data| data.get("absences"))
+        .or_else(|| value.get("absences"))
+        .cloned()
+        .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
+
+    let absences = serde_json
+        ::from_value(absences)
+        .map_err(|error| {
+            WebUntisError::Message(format!("Failed to parse absences payload: {error}"))
+        })?;
+
+    Ok(AbsencesPayload { absences })
+}
+
+fn string_or_default<'de, D>(deserializer: D) -> Result<String, D::Error> where D: Deserializer<'de> {
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 pub(super) fn map_absence_payload(config: &Config, payload: AbsencesPayload) -> Vec<ParsedAbsence> {
-    let mut absences = payload
-        .absences
+    let mut absences = payload.absences
         .into_iter()
         .filter_map(|absence| {
             Some(ParsedAbsence {
