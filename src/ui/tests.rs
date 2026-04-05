@@ -1,7 +1,13 @@
 use super::render;
-use crate::app::state::{AppState, Screen};
+use crate::app::state::{ AppState, Screen };
 use crate::models::{
-    Config, DayTimetable, ParsedAbsence, ParsedLesson, SavedConfig, TimeUnit, WeekTimetable,
+    Config,
+    DayTimetable,
+    ParsedAbsence,
+    ParsedLesson,
+    SavedConfig,
+    TimeUnit,
+    WeekTimetable,
 };
 use crate::shortcuts::TabId;
 use ratatui::Terminal;
@@ -37,7 +43,7 @@ fn sample_lesson(
     instance_id: &str,
     subject: &str,
     start_time: &str,
-    end_time: &str,
+    end_time: &str
 ) -> ParsedLesson {
     ParsedLesson {
         instance_id: instance_id.into(),
@@ -64,7 +70,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
     let monday = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).unwrap();
     let timegrid = (0..period_count)
         .map(|index| {
-            let start_minutes = 8 * 60 + index as i32 * 50;
+            let start_minutes = 8 * 60 + (index as i32) * 50;
             let end_minutes = start_minutes + 50;
             TimeUnit {
                 name: (index + 1).to_string(),
@@ -81,7 +87,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                 &format!("lesson-{index}"),
                 &format!("S{index}"),
                 &period.start_time,
-                &period.end_time,
+                &period.end_time
             )
         })
         .collect::<Vec<_>>();
@@ -110,13 +116,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                 lessons: Vec::new(),
             },
             DayTimetable {
-                date: monday
-                    .succ_opt()
-                    .unwrap()
-                    .succ_opt()
-                    .unwrap()
-                    .succ_opt()
-                    .unwrap(),
+                date: monday.succ_opt().unwrap().succ_opt().unwrap().succ_opt().unwrap(),
                 day_name: "Thursday".into(),
                 lessons: Vec::new(),
             },
@@ -132,7 +132,7 @@ fn sample_timetable(period_count: usize, overlapping: bool) -> WeekTimetable {
                     .unwrap(),
                 day_name: "Friday".into(),
                 lessons: Vec::new(),
-            },
+            }
         ],
         timegrid,
     }
@@ -148,7 +148,7 @@ fn overlap_timetable() -> WeekTimetable {
                 lessons: vec![
                     sample_lesson("overlap-a", "M", "08:00", "09:40"),
                     sample_lesson("overlap-b", "E", "08:00", "08:50"),
-                    sample_lesson("overlap-c", "B", "08:50", "09:40"),
+                    sample_lesson("overlap-c", "B", "08:50", "09:40")
                 ],
             },
             DayTimetable {
@@ -162,13 +162,7 @@ fn overlap_timetable() -> WeekTimetable {
                 lessons: Vec::new(),
             },
             DayTimetable {
-                date: monday
-                    .succ_opt()
-                    .unwrap()
-                    .succ_opt()
-                    .unwrap()
-                    .succ_opt()
-                    .unwrap(),
+                date: monday.succ_opt().unwrap().succ_opt().unwrap().succ_opt().unwrap(),
                 day_name: "Thursday".into(),
                 lessons: Vec::new(),
             },
@@ -184,7 +178,7 @@ fn overlap_timetable() -> WeekTimetable {
                     .unwrap(),
                 day_name: "Friday".into(),
                 lessons: Vec::new(),
-            },
+            }
         ],
         timegrid: vec![
             TimeUnit {
@@ -206,7 +200,7 @@ fn overlap_timetable() -> WeekTimetable {
                 name: "4".into(),
                 start_time: "10:30".into(),
                 end_time: "11:20".into(),
-            },
+            }
         ],
     }
 }
@@ -398,6 +392,29 @@ fn render_timetable_wide_layout_shows_split_cells_and_details() {
     assert!(output.contains("▍E"));
     assert!(output.contains("Details"));
     assert!(output.contains("Teachers:"));
+}
+
+#[test]
+fn render_timetable_header_uses_split_title_and_navigation_line() {
+    let backend = TestBackend::new(140, 32);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.config = Some(Config {
+        school: "htl-leonding".into(),
+        username: "if220179".into(),
+        password: "secret".into(),
+        server: "mese.webuntis.com".into(),
+    });
+    state.main.timetable.week_offset = 1;
+    state.main.timetable.data = Some(sample_timetable(4, false));
+    terminal.draw(|frame| render(frame, &state)).unwrap();
+    let output = buffer_text(terminal.backend().buffer());
+    assert!(output.contains("WebUntis TUI"));
+    assert!(output.contains("if220179@htl-leonding"));
+    assert!(output.contains("Apr 6, 2026 - Apr 10, 2026"));
+    assert!(output.contains("‹"));
+    assert!(output.contains("›"));
 }
 
 #[test]
