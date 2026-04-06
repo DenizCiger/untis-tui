@@ -1,0 +1,33 @@
+FROM rust:1.88-bookworm AS build
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+ARG TARGETARCH
+ARG TTYD_VERSION=1.7.7
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN case "${TARGETARCH}" in \
+        amd64) ttyd_arch="x86_64" ;; \
+        arm64) ttyd_arch="aarch64" ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /usr/local/bin/ttyd "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${ttyd_arch}" \
+    && chmod +x /usr/local/bin/ttyd
+
+COPY --from=build /app/target/release/untis-tui /usr/local/bin/untis-tui
+
+ENV TERM=xterm-256color
+ENV DEMO_PORT=7681
+
+EXPOSE 7681
+
+CMD ["sh", "-lc", "exec ttyd -p ${DEMO_PORT} -W untis-tui --demo"]

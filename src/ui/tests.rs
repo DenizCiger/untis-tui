@@ -539,11 +539,27 @@ fn render_timetable_header_uses_split_title_and_navigation_line() {
     state.main.timetable.data = Some(sample_timetable(4, false));
     terminal.draw(|frame| render(frame, &state)).unwrap();
     let output = buffer_text(terminal.backend().buffer());
+    let (monday, friday) = crate::models::current_week_range(state.main.timetable.week_offset);
     assert!(output.contains("WebUntis TUI"));
     assert!(output.contains("if220179@htl-leonding"));
-    assert!(output.contains("Apr 6, 2026 - Apr 10, 2026"));
+    assert!(output.contains(&format!(
+        "{} - {}",
+        crate::models::format_date(monday),
+        crate::models::format_date(friday)
+    )));
     assert!(output.contains("‹"));
     assert!(output.contains("›"));
+}
+
+#[test]
+fn render_main_shell_marks_demo_mode_in_header() {
+    let backend = TestBackend::new(120, 35);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut state = AppState::new_demo();
+    state.initial_commands();
+    terminal.draw(|frame| render(frame, &state)).unwrap();
+    let output = buffer_text(terminal.backend().buffer());
+    assert!(output.contains("Demo Mode"));
 }
 
 #[test]

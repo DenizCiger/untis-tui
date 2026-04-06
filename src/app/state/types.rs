@@ -6,6 +6,13 @@ use crate::shortcuts::TabId;
 use chrono::{Datelike, NaiveDate};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LaunchMode {
+    #[default]
+    Normal,
+    Demo,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Loading,
@@ -173,6 +180,7 @@ pub(crate) struct ProfileSessionState {
 
 #[derive(Debug, Clone)]
 pub struct AppState {
+    pub launch_mode: LaunchMode,
     pub screen: Screen,
     pub saved_config: Option<SavedConfig>,
     pub saved_password: Option<String>,
@@ -264,6 +272,7 @@ impl Default for MainState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
+            launch_mode: LaunchMode::Normal,
             screen: Screen::Loading,
             saved_config: None,
             saved_password: None,

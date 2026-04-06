@@ -1,4 +1,5 @@
 pub mod app;
+pub mod demo;
 pub mod models;
 pub mod shortcuts;
 pub mod storage;

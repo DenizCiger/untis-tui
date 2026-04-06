@@ -64,17 +64,21 @@ impl AppState {
                 self.config = Some(config.clone());
                 self.screen = super::Screen::MainShell;
 
-                if let Err(error) = save_config(&config) {
-                    self.app_error = format!(
-                        "Login succeeded, but profile settings could not be saved to disk: {error}"
-                    );
-                } else {
+                if self.is_demo_mode() {
                     self.app_error.clear();
-                }
+                } else {
+                    if let Err(error) = save_config(&config) {
+                        self.app_error = format!(
+                            "Login succeeded, but profile settings could not be saved to disk: {error}"
+                        );
+                    } else {
+                        self.app_error.clear();
+                    }
 
-                if let Err(error) = save_password(&config.saved(), &config.password) {
-                    self.app_error =
-                        format!("Login succeeded, but secure password storage failed: {error}");
+                    if let Err(error) = save_password(&config.saved(), &config.password) {
+                        self.app_error =
+                            format!("Login succeeded, but secure password storage failed: {error}");
+                    }
                 }
 
                 self.enter_main_shell()
@@ -104,12 +108,14 @@ impl AppState {
                 self.main.timetable.is_from_cache = false;
                 self.main.timetable.error.clear();
                 self.sync_timetable_scroll();
-                let monday = crate::models::get_monday(week_date);
-                let _ = save_week_to_cache(
-                    &crate::models::format_web_date(monday),
-                    &data,
-                    &target_to_cache_key(Some(&target)),
-                );
+                if !self.is_demo_mode() {
+                    let monday = crate::models::get_monday(week_date);
+                    let _ = save_week_to_cache(
+                        &crate::models::format_web_date(monday),
+                        &data,
+                        &target_to_cache_key(Some(&target)),
+                    );
+                }
             }
             Err(error) => {
                 self.main.timetable.error = error;

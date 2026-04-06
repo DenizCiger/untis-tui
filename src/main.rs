@@ -52,7 +52,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
     let (tx, mut rx) = mpsc::unbounded_channel::<RuntimeEvent>();
     spawn_input_thread(tx.clone());
 
-    let mut state = AppState::new();
+    let demo_mode = std::env::args().skip(1).any(|arg| arg == "--demo");
+    let mut state = if demo_mode {
+        AppState::new_demo()
+    } else {
+        AppState::new()
+    };
     if let Ok((width, height)) = crossterm::terminal::size() {
         state.update_terminal_size(width, height);
     }

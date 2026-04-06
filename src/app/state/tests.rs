@@ -672,3 +672,68 @@ fn mouse_clicks_are_ignored_while_absence_search_is_open() {
 
     assert_eq!(state.main.absences.selected_idx, 1);
 }
+
+#[test]
+fn demo_mode_starts_in_main_shell_with_mock_data_and_no_async_commands() {
+    let mut state = AppState::new_demo();
+
+    let commands = state.initial_commands();
+
+    assert!(commands.is_empty());
+    assert_eq!(state.screen, Screen::MainShell);
+    assert!(state.is_demo_mode());
+    assert!(state.main.timetable.data.is_some());
+    assert!(!state.main.absences.absences.is_empty());
+    assert_eq!(state.main.timetable.selected_day_idx, 0);
+}
+
+#[test]
+fn demo_mode_refresh_and_search_stay_local() {
+    let mut state = AppState::new_demo();
+    state.initial_commands();
+    state.main.timetable.active_target = TimetableTarget::Room {
+        id: crate::demo::DEMO_ROOM_ID,
+        name: "LAB-7".into(),
+        long_name: "Interaction Lab 7".into(),
+    };
+
+    let timetable_commands = state.request_timetable(true);
+    let absence_commands = state.request_absences_refresh();
+    let search_commands = state.request_search_index();
+
+    assert!(timetable_commands.is_empty());
+    assert!(absence_commands.is_empty());
+    assert!(search_commands.is_empty());
+    assert_eq!(
+        state.main.timetable.active_target,
+        TimetableTarget::Room {
+            id: crate::demo::DEMO_ROOM_ID,
+            name: "LAB-7".into(),
+            long_name: "Interaction Lab 7".into(),
+        }
+    );
+    assert!(state.main.timetable.search_index.len() >= 3);
+    assert!(state.main.absences.absences.len() >= 12);
+}
+
+#[test]
+fn demo_mode_logout_resets_to_initial_demo_state() {
+    let mut state = AppState::new_demo();
+    state.initial_commands();
+    state.main.active_tab = TabId::Absences;
+    state.main.timetable.active_target = TimetableTarget::Teacher {
+        id: crate::demo::DEMO_TEACHER_ID,
+        name: "MILL".into(),
+        long_name: "Mila Iller".into(),
+    };
+    state.main.absences.search_query = "dentist".into();
+
+    state.perform_logout();
+
+    assert!(state.is_demo_mode());
+    assert_eq!(state.screen, Screen::MainShell);
+    assert_eq!(state.main.active_tab, TabId::Timetable);
+    assert_eq!(state.main.timetable.active_target, TimetableTarget::Own);
+    assert!(state.main.absences.search_query.is_empty());
+    assert!(state.main.timetable.data.is_some());
+}

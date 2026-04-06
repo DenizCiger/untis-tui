@@ -15,8 +15,9 @@ use crate::timetable_model::{TimetableRenderModel, build_render_model};
 use chrono::NaiveDate;
 
 pub use types::{
-    AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, LoginField, LoginState, MainState,
-    Screen, StatusFilter, TextInputState, TimetableState, WindowFilter, WorkerEvent,
+    AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, LaunchMode, LoginField,
+    LoginState, MainState, Screen, StatusFilter, TextInputState, TimetableState, WindowFilter,
+    WorkerEvent,
 };
 
 const CHUNK_DAYS: usize = 45;
@@ -29,7 +30,31 @@ impl AppState {
         Self::default()
     }
 
-    pub fn initial_commands(&self) -> Vec<AppCommand> {
+    pub fn new_demo() -> Self {
+        let config = crate::demo::demo_config();
+        let mut state = Self {
+            launch_mode: LaunchMode::Demo,
+            screen: Screen::MainShell,
+            saved_config: Some(config.saved()),
+            saved_password: None,
+            config: Some(config),
+            secure_storage_notice: crate::demo::demo_summary_line(),
+            ..Self::default()
+        };
+        state.main.timetable.selected_day_idx = 0;
+        state.main.timetable.selected_period_idx = 0;
+        state.main.timetable.selected_lesson_idx = 0;
+        state
+    }
+
+    pub fn is_demo_mode(&self) -> bool {
+        matches!(self.launch_mode, LaunchMode::Demo)
+    }
+
+    pub fn initial_commands(&mut self) -> Vec<AppCommand> {
+        if self.is_demo_mode() {
+            return self.enter_main_shell();
+        }
         vec![AppCommand::Bootstrap]
     }
 

@@ -9,7 +9,7 @@ const binaryPath = path.join(__dirname, "..", "scripts", "native", binaryName);
 
 if (!fs.existsSync(binaryPath)) {
   console.error(
-    "The Untis binary is missing. Reinstall the package or run `npm rebuild -g untis`."
+    "The Untis binary is missing. Reinstall the package or run `npm rebuild -g untis-tui`."
   );
   process.exit(1);
 }
