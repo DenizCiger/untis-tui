@@ -1,6 +1,6 @@
 {
   "name": "untis-tui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Terminal UI for Untis, distributed as a prebuilt Rust binary.",
   "license": "MIT",
   "repository": {
