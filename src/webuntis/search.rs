@@ -211,6 +211,20 @@ fn to_words(value: &str) -> Vec<String> {
     words
 }
 
+fn compact(value: &str) -> String {
+    normalize(value)
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect()
+}
+
+fn initials(words: &[String]) -> String {
+    words
+        .iter()
+        .filter_map(|word| word.chars().next())
+        .collect::<String>()
+}
+
 fn search_type_order(target_type: TimetableSearchTargetType) -> i32 {
     match target_type {
         TimetableSearchTargetType::Class => 0,
@@ -279,14 +293,73 @@ fn fuzzy_subsequence_penalty(haystack: &str, query: &str) -> Option<usize> {
     Some(penalty)
 }
 
+fn bounded_edit_distance(left: &str, right: &str, max_distance: usize) -> Option<usize> {
+    let left = left.chars().collect::<Vec<_>>();
+    let right = right.chars().collect::<Vec<_>>();
+    if left.len().abs_diff(right.len()) > max_distance {
+        return None;
+    }
+
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    for (left_index, left_char) in left.iter().enumerate() {
+        let mut current = vec![left_index + 1];
+        let mut row_min = current[0];
+        for (right_index, right_char) in right.iter().enumerate() {
+            let insertion = current[right_index] + 1;
+            let deletion = previous[right_index + 1] + 1;
+            let substitution = previous[right_index] + usize::from(left_char != right_char);
+            let distance = insertion.min(deletion).min(substitution);
+            row_min = row_min.min(distance);
+            current.push(distance);
+        }
+        if row_min > max_distance {
+            return None;
+        }
+        previous = current;
+    }
+
+    let distance = previous[right.len()];
+    (distance <= max_distance).then_some(distance)
+}
+
+fn typo_tolerance(query: &str) -> usize {
+    if query.chars().any(|character| character.is_ascii_digit()) {
+        return 0;
+    }
+    match query.chars().count() {
+        0..=3 => 0,
+        4..=6 => 1,
+        _ => 2,
+    }
+}
+
+fn typo_penalty(candidates: &[String], query: &str) -> Option<usize> {
+    let max_distance = typo_tolerance(query);
+    if max_distance == 0 {
+        return None;
+    }
+    candidates
+        .iter()
+        .filter(|candidate| !candidate.is_empty())
+        .filter_map(|candidate| {
+            bounded_edit_distance(candidate, query, max_distance)
+                .map(|distance| distance * 24 + candidate.len().abs_diff(query.len()))
+        })
+        .min()
+}
+
 #[derive(Debug, Clone)]
 struct PreparedSearchItem {
     name: String,
     long_name: String,
     search_text: String,
     compact_search: String,
+    compact_name: String,
+    compact_long_name: String,
     name_words: Vec<String>,
     long_name_words: Vec<String>,
+    search_words: Vec<String>,
+    initials: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -304,13 +377,21 @@ fn prepare_search_item(item: &TimetableSearchItem) -> PreparedSearchItem {
         item.search_text.clone()
     };
     let search_text = normalize(&search_source);
+    let name_words = to_words(&name);
+    let long_name_words = to_words(&long_name);
+    let search_words = to_words(&search_text);
+    let initials = initials(&search_words);
     PreparedSearchItem {
         name: name.clone(),
         long_name: long_name.clone(),
-        compact_search: search_text.replace(' ', ""),
+        compact_search: compact(&search_text),
+        compact_name: compact(&name),
+        compact_long_name: compact(&long_name),
         search_text,
-        name_words: to_words(&name),
-        long_name_words: to_words(&long_name),
+        name_words,
+        long_name_words,
+        search_words,
+        initials,
     }
 }
 
@@ -356,6 +437,39 @@ fn get_match_rank(
             penalty: token_contains_penalty(&item.search_text, tokens).unwrap_or(0),
         });
     }
+    if item.compact_name.starts_with(compact_query) {
+        return Some(MatchRank {
+            rank: 7,
+            penalty: item.compact_name.len().saturating_sub(compact_query.len()),
+        });
+    }
+    if item.compact_long_name.starts_with(compact_query) {
+        return Some(MatchRank {
+            rank: 8,
+            penalty: item
+                .compact_long_name
+                .len()
+                .saturating_sub(compact_query.len()),
+        });
+    }
+    if item.compact_search.contains(compact_query) {
+        return Some(MatchRank {
+            rank: 9,
+            penalty: item.compact_search.find(compact_query).unwrap_or(0),
+        });
+    }
+    if item.initials.starts_with(compact_query) {
+        return Some(MatchRank {
+            rank: 10,
+            penalty: item.initials.len().saturating_sub(compact_query.len()),
+        });
+    }
+    if let Some(penalty) = fuzzy_subsequence_penalty(&item.initials, compact_query) {
+        return Some(MatchRank { rank: 11, penalty });
+    }
+    if let Some(penalty) = typo_penalty(&item.search_words, compact_query) {
+        return Some(MatchRank { rank: 12, penalty });
+    }
     fuzzy_subsequence_penalty(&item.compact_search, compact_query)
-        .map(|penalty| MatchRank { rank: 7, penalty })
+        .map(|penalty| MatchRank { rank: 13, penalty })
 }

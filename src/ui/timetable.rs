@@ -195,7 +195,21 @@ pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState,
         Line::from("")
     ];
 
-    for (index, result) in state.timetable_search_results().into_iter().take(12).enumerate() {
+    let result_rows = inner.height.saturating_sub(lines.len() as u16) as usize;
+    let results = state.timetable_search_results();
+    let visible_start = state
+        .main
+        .timetable
+        .search_selected_idx
+        .min(results.len().saturating_sub(1))
+        .saturating_sub(result_rows.saturating_sub(1));
+    for (local_index, result) in results
+        .into_iter()
+        .skip(visible_start)
+        .take(result_rows)
+        .enumerate()
+    {
+        let index = visible_start + local_index;
         let selected = index == state.main.timetable.search_selected_idx;
         lines.push(
             Line::from(

@@ -161,6 +161,109 @@ fn timetable_search_ranking_returns_all_matches_when_no_limit_is_provided() {
 }
 
 #[test]
+fn timetable_search_ranking_matches_separator_insensitive_queries() {
+    let results = search_timetable_targets(
+        &[
+            item(
+                1,
+                TimetableSearchTargetType::Room,
+                "LAB-7",
+                "Interaction Lab 7",
+                None,
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Room,
+                "LAB-8",
+                "Interaction Lab 8",
+                None,
+            ),
+        ],
+        "lab7",
+        Some(10),
+    );
+    assert_eq!(
+        results.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+        vec![1]
+    );
+}
+
+#[test]
+fn timetable_search_ranking_matches_initial_queries() {
+    let results = search_timetable_targets(
+        &[
+            item(
+                1,
+                TimetableSearchTargetType::Teacher,
+                "MILL",
+                "Mila Iller",
+                Some("mill mila iller teacher"),
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Teacher,
+                "MIRA",
+                "Mira Adler",
+                Some("mira adler teacher"),
+            ),
+        ],
+        "mi",
+        Some(10),
+    );
+    assert_eq!(results.first().map(|entry| entry.id), Some(1));
+}
+
+#[test]
+fn timetable_search_ranking_matches_small_typos() {
+    let results = search_timetable_targets(
+        &[
+            item(
+                1,
+                TimetableSearchTargetType::Room,
+                "AUD-2",
+                "Auditorium 2",
+                None,
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Room,
+                "GYM",
+                "Main Gym",
+                None,
+            ),
+        ],
+        "auditorum",
+        Some(10),
+    );
+    assert_eq!(results.first().map(|entry| entry.id), Some(1));
+}
+
+#[test]
+fn timetable_search_ranking_keeps_clean_matches_above_fuzzy_matches() {
+    let results = search_timetable_targets(
+        &[
+            item(
+                1,
+                TimetableSearchTargetType::Teacher,
+                "MILL",
+                "Mila Iller",
+                Some("mill mila iller teacher"),
+            ),
+            item(
+                2,
+                TimetableSearchTargetType::Teacher,
+                "MILA",
+                "Milena Anders",
+                Some("mila milena anders teacher"),
+            ),
+        ],
+        "mila",
+        Some(10),
+    );
+    assert_eq!(results.first().map(|entry| entry.id), Some(2));
+}
+
+#[test]
 fn repeated_rows_logic_repeats_multi_period_lessons() {
     let lesson = ParsedLesson {
         instance_id: "x".into(),

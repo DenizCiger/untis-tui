@@ -4,7 +4,8 @@ use super::{
 };
 use crate::app::state::{AppState, Screen};
 use crate::models::{
-    Config, DayTimetable, ParsedAbsence, ParsedLesson, SavedConfig, TimeUnit, WeekTimetable,
+    Config, DayTimetable, ParsedAbsence, ParsedLesson, SavedConfig, TimeUnit,
+    TimetableSearchItem, TimetableSearchTargetType, WeekTimetable,
 };
 use crate::shortcuts::TabId;
 use ratatui::Terminal;
@@ -589,4 +590,52 @@ fn render_timetable_shows_scroll_hints_when_grid_is_scrolled() {
     let output = buffer_text(terminal.backend().buffer());
     assert!(output.contains("▲ 2 more ▲"));
     assert!(output.contains("▼ 3 more ▼"));
+}
+
+#[test]
+fn render_timetable_search_popup_uses_available_result_height() {
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.main.timetable.search_open = true;
+    state.main.timetable.search_index = (0..20)
+        .map(|index| TimetableSearchItem {
+            r#type: TimetableSearchTargetType::Class,
+            id: index,
+            name: format!("CLS{index:02}"),
+            long_name: format!("Class {index:02}"),
+            search_text: format!("CLS{index:02} Class {index:02}"),
+        })
+        .collect();
+
+    terminal.draw(|frame| render(frame, &state)).unwrap();
+    let output = buffer_text(terminal.backend().buffer());
+    assert!(output.contains("CLS00"));
+    assert!(output.contains("CLS12"));
+    assert!(output.contains("CLS13"));
+}
+
+#[test]
+fn render_timetable_search_popup_scrolls_to_selected_result() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut state = AppState::new();
+    state.screen = Screen::MainShell;
+    state.main.timetable.search_open = true;
+    state.main.timetable.search_selected_idx = 14;
+    state.main.timetable.search_index = (0..20)
+        .map(|index| TimetableSearchItem {
+            r#type: TimetableSearchTargetType::Class,
+            id: index,
+            name: format!("CLS{index:02}"),
+            long_name: format!("Class {index:02}"),
+            search_text: format!("CLS{index:02} Class {index:02}"),
+        })
+        .collect();
+
+    terminal.draw(|frame| render(frame, &state)).unwrap();
+    let output = buffer_text(terminal.backend().buffer());
+    assert!(!output.contains("CLS00"));
+    assert!(output.contains("CLS14"));
 }
