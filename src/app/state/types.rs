@@ -3,7 +3,7 @@ use crate::models::{
     get_default_timetable_target, today_local,
 };
 use crate::shortcuts::TabId;
-pub use tui_components::input::TextInputState;
+pub use tui_components::input::{SearchKeyOutcome, SearchMode, SearchModalState, TextInputState};
 use chrono::{Datelike, NaiveDate};
 use std::collections::HashMap;
 
@@ -135,8 +135,7 @@ pub struct TimetableState {
     pub search_index_loading: bool,
     pub search_index_error: String,
     pub search_open: bool,
-    pub search_input: TextInputState,
-    pub search_selected_idx: usize,
+    pub search: SearchModalState,
     pub request_id: u64,
 }
 
@@ -152,7 +151,7 @@ pub struct AbsencesState {
     pub status_filter: StatusFilter,
     pub window_filter: WindowFilter,
     pub search_query: String,
-    pub search_input: TextInputState,
+    pub search: SearchModalState,
     pub search_open: bool,
     pub chunk_index: usize,
     pub empty_chunk_streak: usize,
@@ -225,8 +224,7 @@ impl Default for TimetableState {
             search_index_loading: false,
             search_index_error: String::new(),
             search_open: false,
-            search_input: TextInputState::default(),
-            search_selected_idx: 0,
+            search: SearchModalState::default(),
             request_id: 0,
         }
     }
@@ -245,7 +243,7 @@ impl Default for AbsencesState {
             status_filter: StatusFilter::All,
             window_filter: WindowFilter::All,
             search_query: String::new(),
-            search_input: TextInputState::default(),
+            search: SearchModalState::default(),
             search_open: false,
             chunk_index: 0,
             empty_chunk_streak: 0,

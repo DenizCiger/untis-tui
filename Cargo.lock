@@ -2187,8 +2187,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tui-components"
-version = "0.1.8"
-source = "git+https://github.com/DenizCiger/tui-components?tag=v0.1.8#13c0e892c0d922e2ac25f50393285228b18c367f"
+version = "0.1.10"
+source = "git+https://github.com/DenizCiger/tui-components?tag=v0.1.10#86291538dcb475a5867623863259963b43497e44"
 dependencies = [
  "crossterm",
  "directories",

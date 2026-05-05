@@ -104,7 +104,7 @@ impl AppState {
     pub fn timetable_search_results(&self) -> Vec<crate::models::TimetableSearchItem> {
         crate::webuntis::search_timetable_targets(
             &self.main.timetable.search_index,
-            &self.main.timetable.search_input.value,
+            &self.main.timetable.search.input.value,
             None,
         )
     }

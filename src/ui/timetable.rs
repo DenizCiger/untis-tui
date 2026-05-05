@@ -1,9 +1,7 @@
 use super::shared::{
     centered_message_lines,
-    centered_rect,
     fit_text,
     line_with_right,
-    render_input_text,
 };
 use super::theme::{
     ALT_BG,
@@ -48,7 +46,7 @@ use ratatui::Frame;
 use ratatui::layout::{ Constraint, Direction, Layout, Rect };
 use ratatui::style::{ Color, Modifier, Style };
 use ratatui::text::{ Line, Span };
-use ratatui::widgets::{ Block, Borders, Clear, Paragraph, Wrap };
+use ratatui::widgets::{ Paragraph, Wrap };
 use unicode_width::UnicodeWidthStr;
 
 const TITLE_ROWS: u16 = 2;
@@ -162,83 +160,44 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
     );
 }
 
-pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState, area: Rect) {
-    let popup = centered_rect(70, 60, area);
-    frame.render_widget(Clear, popup);
-    let block = Block::default()
-        .title("Timetable Target Search")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(BRAND));
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
+pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState, _area: Rect) {
+    use tui_components::ui::search::{SearchModal, SearchModalRow};
 
-    let mut lines = vec![
-        Line::from(
-            format!(
-                "> {}",
-                render_input_text(
-                    &state.main.timetable.search_input.value,
-                    state.main.timetable.search_input.cursor,
-                    false
-                )
-            )
-        ),
-        Line::from(
-            if state.main.timetable.search_index_loading {
-                "Loading timetable targets...".to_owned()
-            } else if !state.main.timetable.search_index_error.is_empty() {
-                format!("Target load failed: {}", state.main.timetable.search_index_error)
-            } else {
-                "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
-            }
-        ),
-        Line::from("")
-    ];
-
-    let result_rows = inner.height.saturating_sub(lines.len() as u16) as usize;
+    let hint = if state.main.timetable.search_index_loading {
+        "Loading timetable targets...".to_owned()
+    } else if !state.main.timetable.search_index_error.is_empty() {
+        format!("Target load failed: {}", state.main.timetable.search_index_error)
+    } else {
+        "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
+    };
     let results = state.timetable_search_results();
-    let visible_start = state
-        .main
-        .timetable
-        .search_selected_idx
-        .min(results.len().saturating_sub(1))
-        .saturating_sub(result_rows.saturating_sub(1));
-    for (local_index, result) in results
+    let rows: Vec<SearchModalRow> = results
         .into_iter()
-        .skip(visible_start)
-        .take(result_rows)
-        .enumerate()
-    {
-        let index = visible_start + local_index;
-        let selected = index == state.main.timetable.search_selected_idx;
-        lines.push(
-            Line::from(
-                vec![
-                    Span::styled(
-                        if selected {
-                            "> "
-                        } else {
-                            "  "
-                        },
-                        Style::default().fg(if selected { BRAND } else { Color::Gray })
-                    ),
-                    Span::styled(
-                        format!("[{}] ", format_timetable_search_type_label(result.r#type)),
-                        Style::default().fg(Color::Gray)
-                    ),
-                    Span::raw(
-                        format!("{}{}", result.name, if result.long_name != result.name {
-                            format!(" ({})", result.long_name)
-                        } else {
-                            String::new()
-                        })
-                    )
-                ]
-            )
-        );
+        .map(|result| {
+            let suffix = if result.long_name != result.name {
+                format!(" ({})", result.long_name)
+            } else {
+                String::new()
+            };
+            SearchModalRow::new(vec![
+                Span::styled(
+                    format!("[{}] ", format_timetable_search_type_label(result.r#type)),
+                    Style::default().fg(Color::Gray),
+                ),
+                Span::raw(format!("{}{}", result.name, suffix)),
+            ])
+        })
+        .collect();
+    SearchModal {
+        title: "Timetable Target Search",
+        hint: &hint,
+        state: &state.main.timetable.search,
+        rows,
+        categories: None,
+        empty_text: "No matches",
+        theme: super::theme::components_theme(),
     }
-
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    .render(frame);
 }
 
 fn build_timetable_title_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {

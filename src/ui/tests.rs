@@ -623,7 +623,7 @@ fn render_timetable_search_popup_scrolls_to_selected_result() {
     let mut state = AppState::new();
     state.screen = Screen::MainShell;
     state.main.timetable.search_open = true;
-    state.main.timetable.search_selected_idx = 14;
+    state.main.timetable.search.selected = 14;
     state.main.timetable.search_index = (0..20)
         .map(|index| TimetableSearchItem {
             r#type: TimetableSearchTargetType::Class,

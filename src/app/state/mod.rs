@@ -16,8 +16,8 @@ use chrono::NaiveDate;
 
 pub use types::{
     AbsenceChunkPayload, AppCommand, AppState, BootstrapPayload, LaunchMode, LoginField,
-    LoginState, MainState, Screen, StatusFilter, TextInputState, TimetableState, WindowFilter,
-    WorkerEvent,
+    LoginState, MainState, Screen, SearchKeyOutcome, SearchMode, SearchModalState, StatusFilter,
+    TextInputState, TimetableState, WindowFilter, WorkerEvent,
 };
 
 const CHUNK_DAYS: usize = 45;

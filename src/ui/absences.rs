@@ -157,8 +157,8 @@ pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         Line::from(vec![
             Span::styled("Search: ", Style::default().fg(BRAND)),
             Span::raw(render_input_text(
-                &state.main.absences.search_input.value,
-                state.main.absences.search_input.cursor,
+                &state.main.absences.search.input.value,
+                state.main.absences.search.input.cursor,
                 false,
             )),
         ])

@@ -1,4 +1,4 @@
-use super::{AppCommand, AppState, LoginField, TextInputState};
+use super::{AppCommand, AppState, LoginField};
 use crate::models::{TimetableTarget, today_local};
 use crate::shortcuts::{TabId, get_shortcut_sections, is_shortcut_pressed};
 use crate::timetable_model::{find_next_lesson_period_index, hit_test_timetable_click};
@@ -417,51 +417,41 @@ impl AppState {
     }
 
     fn handle_timetable_search_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
-        if key.code == KeyCode::Esc {
-            self.main.timetable.search_open = false;
-            return Vec::new();
-        }
-        if key.code == KeyCode::Up {
-            self.main.timetable.search_selected_idx =
-                self.main.timetable.search_selected_idx.saturating_sub(1);
-            return Vec::new();
-        }
-        if key.code == KeyCode::Down {
-            let max_index = self.timetable_search_results().len().saturating_sub(1);
-            self.main.timetable.search_selected_idx =
-                (self.main.timetable.search_selected_idx + 1).min(max_index);
-            return Vec::new();
-        }
-        if key.code == KeyCode::Enter {
-            let results = self.timetable_search_results();
-            if let Some(selected) = results.get(self.main.timetable.search_selected_idx) {
-                self.main.timetable.active_target = match selected.r#type {
-                    crate::models::TimetableSearchTargetType::Class => TimetableTarget::Class {
-                        id: selected.id,
-                        name: selected.name.clone(),
-                        long_name: selected.long_name.clone(),
-                    },
-                    crate::models::TimetableSearchTargetType::Room => TimetableTarget::Room {
-                        id: selected.id,
-                        name: selected.name.clone(),
-                        long_name: selected.long_name.clone(),
-                    },
-                    crate::models::TimetableSearchTargetType::Teacher => TimetableTarget::Teacher {
-                        id: selected.id,
-                        name: selected.name.clone(),
-                        long_name: selected.long_name.clone(),
-                    },
-                };
+        let max = self.timetable_search_results().len();
+        match self.main.timetable.search.handle_key(key, max, super::SearchMode::Live) {
+            super::SearchKeyOutcome::Cancel => {
                 self.main.timetable.search_open = false;
-                self.persist_profile_session();
-                return self.request_timetable(false);
             }
-            self.main.timetable.search_open = false;
-            return Vec::new();
+            super::SearchKeyOutcome::Submit => {
+                let results = self.timetable_search_results();
+                if let Some(selected) = results.get(self.main.timetable.search.selected) {
+                    self.main.timetable.active_target = match selected.r#type {
+                        crate::models::TimetableSearchTargetType::Class => TimetableTarget::Class {
+                            id: selected.id,
+                            name: selected.name.clone(),
+                            long_name: selected.long_name.clone(),
+                        },
+                        crate::models::TimetableSearchTargetType::Room => TimetableTarget::Room {
+                            id: selected.id,
+                            name: selected.name.clone(),
+                            long_name: selected.long_name.clone(),
+                        },
+                        crate::models::TimetableSearchTargetType::Teacher => {
+                            TimetableTarget::Teacher {
+                                id: selected.id,
+                                name: selected.name.clone(),
+                                long_name: selected.long_name.clone(),
+                            }
+                        }
+                    };
+                    self.main.timetable.search_open = false;
+                    self.persist_profile_session();
+                    return self.request_timetable(false);
+                }
+                self.main.timetable.search_open = false;
+            }
+            _ => {}
         }
-
-        self.main.timetable.search_input.handle_key(key);
-        self.main.timetable.search_selected_idx = 0;
         Vec::new()
     }
 
@@ -497,15 +487,14 @@ impl AppState {
             self.main.absences.status_filter = super::StatusFilter::All;
             self.main.absences.window_filter = super::WindowFilter::All;
             self.main.absences.search_query.clear();
-            self.main.absences.search_input.value.clear();
-            self.main.absences.search_input.cursor = 0;
+            self.main.absences.search.reset();
             self.main.absences.selected_idx = 0;
             return self.maybe_request_more_absences();
         }
         if is_shortcut_pressed("absences-search", key) {
             self.main.absences.search_open = true;
-            self.main.absences.search_input =
-                TextInputState::from(self.main.absences.search_query.clone());
+            self.main.absences.search =
+                super::SearchModalState::from_query(&self.main.absences.search_query);
             return Vec::new();
         }
         if is_shortcut_pressed("absences-up", key) {
@@ -543,21 +532,26 @@ impl AppState {
     }
 
     fn handle_absence_search_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
-        if key.code == KeyCode::Esc {
-            self.main.absences.search_open = false;
-            self.main.absences.search_input =
-                TextInputState::from(self.main.absences.search_query.clone());
-            return Vec::new();
+        match self
+            .main
+            .absences
+            .search
+            .handle_key(key, 0, super::SearchMode::Deferred)
+        {
+            super::SearchKeyOutcome::Cancel => {
+                self.main.absences.search_open = false;
+                self.main.absences.search =
+                    super::SearchModalState::from_query(&self.main.absences.search_query);
+            }
+            super::SearchKeyOutcome::Submit => {
+                self.main.absences.search_query =
+                    self.main.absences.search.input.value.trim().to_owned();
+                self.main.absences.search_open = false;
+                self.main.absences.selected_idx = 0;
+                return self.maybe_request_more_absences();
+            }
+            _ => {}
         }
-        if key.code == KeyCode::Enter {
-            self.main.absences.search_query =
-                self.main.absences.search_input.value.trim().to_owned();
-            self.main.absences.search_open = false;
-            self.main.absences.selected_idx = 0;
-            return self.maybe_request_more_absences();
-        }
-
-        self.main.absences.search_input.handle_key(key);
         Vec::new()
     }
 
