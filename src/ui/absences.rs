@@ -588,8 +588,9 @@ impl SchoolHoursModel {
 
 fn day_window_from_lessons(lessons: &[crate::models::ParsedLesson]) -> Option<DayWindow> {
     use crate::models::parse_time_to_minutes;
-    let mut starts = lessons.iter().map(|l| parse_time_to_minutes(&l.start_time));
-    let mut ends = lessons.iter().map(|l| parse_time_to_minutes(&l.end_time));
+    let active: Vec<_> = lessons.iter().filter(|l| !l.cancelled).collect();
+    let mut starts = active.iter().map(|l| parse_time_to_minutes(&l.start_time));
+    let mut ends = active.iter().map(|l| parse_time_to_minutes(&l.end_time));
     let start = starts.next()?;
     let start = starts.fold(start, i32::min);
     let end = ends.next()?;
