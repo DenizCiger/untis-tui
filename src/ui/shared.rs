@@ -1,25 +1,7 @@
-use super::theme::{ALT_BG, BRAND, DIM_GRAY, SELECT_BG};
+use super::theme;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use tui_components::ui::theme::Theme;
-
-fn theme() -> Theme {
-    Theme {
-        brand: BRAND,
-        warning: super::theme::WARNING,
-        error: super::theme::ERROR,
-        success: Color::Indexed(84),
-        neutral_white: Color::Indexed(15),
-        neutral_black: Color::Indexed(16),
-        neutral_gray: DIM_GRAY,
-        neutral_bright_black: super::theme::BORDER_GRAY,
-        panel_header: super::theme::HEADER_BG,
-        panel_selected: SELECT_BG,
-        panel_alternate: ALT_BG,
-    }
-}
-
 pub(super) fn line_with_right(
     left: &str,
     right: &str,
@@ -31,7 +13,7 @@ pub(super) fn line_with_right(
 }
 
 pub(super) fn filter_chip(label: &str, active: bool) -> Span<'static> {
-    tui_components::ui::widgets::filter_chip(label, active, theme())
+    tui_components::ui::widgets::filter_chip(label, active, theme::components_theme())
 }
 
 pub(super) fn truncate_text(value: &str, width: usize) -> String {
@@ -52,7 +34,7 @@ pub(super) fn centered_message_lines(
 }
 
 pub(super) fn tab_span(label: &str, active: bool) -> Span<'static> {
-    tui_components::ui::widgets::tab_span(label, active, theme())
+    tui_components::ui::widgets::tab_span(label, active, theme::components_theme())
 }
 
 pub(super) fn styled_cell(text: &str, bg: Option<Color>, fg: Option<Color>) -> Span<'static> {

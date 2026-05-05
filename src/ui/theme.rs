@@ -32,3 +32,19 @@ pub(super) const SUBJECT_STRIPE_COLORS: [Color; 7] = [
     Color::Indexed(196),
     Color::Indexed(15),
 ];
+
+pub(super) fn components_theme() -> tui_components::ui::theme::Theme {
+    tui_components::ui::theme::Theme {
+        brand: BRAND,
+        warning: WARNING,
+        error: ERROR,
+        success: INFO,
+        neutral_white: BRIGHT_WHITE,
+        neutral_black: BLACK,
+        neutral_gray: DIM_GRAY,
+        neutral_bright_black: BORDER_GRAY,
+        panel_header: HEADER_BG,
+        panel_selected: SELECT_BG,
+        panel_alternate: ALT_BG,
+    }
+}

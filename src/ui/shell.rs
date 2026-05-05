@@ -10,7 +10,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use tui_components::ui::settings::SettingsModal;
-use tui_components::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellClickTarget {
@@ -111,21 +110,5 @@ fn render_shortcuts_modal(frame: &mut Frame, state: &AppState, area: ratatui::la
     );
     modal.scroll = state.main.settings_scroll;
     modal.key_width = 18;
-    modal.render(frame, area, app_theme());
-}
-
-fn app_theme() -> Theme {
-    Theme {
-        brand: theme::BRAND,
-        warning: theme::WARNING,
-        error: theme::ERROR,
-        success: theme::INFO,
-        neutral_white: theme::BRIGHT_WHITE,
-        neutral_black: theme::BLACK,
-        neutral_gray: theme::DIM_GRAY,
-        neutral_bright_black: theme::BORDER_GRAY,
-        panel_header: theme::HEADER_BG,
-        panel_selected: theme::SELECT_BG,
-        panel_alternate: theme::ALT_BG,
-    }
+    modal.render(frame, area, theme::components_theme());
 }

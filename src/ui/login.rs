@@ -1,9 +1,7 @@
 use super::theme;
 use crate::app::state::{AppState, LoginField};
 use ratatui::Frame;
-use ratatui::style::Color;
 use tui_components::ui::login::{LoginFieldView, LoginModal};
-use tui_components::ui::theme::Theme;
 
 pub(super) fn render_login(frame: &mut Frame, state: &AppState) {
     LoginModal {
@@ -63,21 +61,5 @@ Alt+V show password · Ctrl+L saved login · Esc quit",
         width: 72,
         min_height: 18,
     }
-    .render(frame, frame.area(), app_theme());
-}
-
-fn app_theme() -> Theme {
-    Theme {
-        brand: theme::BRAND,
-        warning: theme::WARNING,
-        error: theme::ERROR,
-        success: Color::Indexed(84),
-        neutral_white: theme::BRIGHT_WHITE,
-        neutral_black: theme::BLACK,
-        neutral_gray: theme::DIM_GRAY,
-        neutral_bright_black: theme::BORDER_GRAY,
-        panel_header: theme::HEADER_BG,
-        panel_selected: theme::SELECT_BG,
-        panel_alternate: theme::ALT_BG,
-    }
+    .render(frame, frame.area(), theme::components_theme());
 }
