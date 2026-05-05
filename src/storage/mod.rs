@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod config;
 pub mod secret;
+pub mod session;
 
 use std::path::PathBuf;
 

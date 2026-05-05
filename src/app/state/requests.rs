@@ -288,6 +288,7 @@ impl AppState {
 
         self.persist_profile_session();
         let _ = clear_cache();
+        crate::storage::session::set_auto_login(false);
         self.config = None;
         self.app_error.clear();
         self.main.settings_open = false;

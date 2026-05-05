@@ -38,6 +38,12 @@ impl AppState {
         self.hydrate_login_form();
 
         self.screen = super::Screen::Login;
+        if !self.is_demo_mode() && crate::storage::session::auto_login_enabled() {
+            if let Some(config) = self.saved_login_config() {
+                self.login.loading = true;
+                return vec![AppCommand::ValidateLogin(config)];
+            }
+        }
         Vec::new()
     }
 
@@ -48,6 +54,7 @@ impl AppState {
                 self.login.error.clear();
                 self.saved_config = Some(config.saved());
                 self.saved_password = Some(config.password.clone());
+                crate::storage::session::set_auto_login(true);
                 self.config = Some(config.clone());
                 self.screen = super::Screen::MainShell;
 
@@ -71,6 +78,7 @@ impl AppState {
                 self.enter_main_shell()
             }
             Err(error) => {
+                crate::storage::session::set_auto_login(false);
                 self.login.error = error;
                 Vec::new()
             }
