@@ -2,9 +2,9 @@ use crate::models::{DayTimetable, ParsedLesson, WeekTimetable};
 use crate::storage::{StorageError, config_dir};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use tui_components::storage::json::{named_file, read_json_or_default, write_json_pretty};
+use tui_components::storage::time::{is_expired, now_ms};
 
 const MAX_CACHED_WEEKS: usize = 12;
 const CACHE_TTL_MS: u64 = 1000 * 60 * 60 * 24 * 21;
@@ -22,7 +22,7 @@ struct CachedWeekEntry {
 }
 
 pub fn cache_file() -> Result<PathBuf, StorageError> {
-    Ok(config_dir()?.join("cache.json"))
+    Ok(named_file(config_dir()?, "cache.json"))
 }
 
 pub fn build_week_cache_key(monday: &str, target_key: &str) -> String {
@@ -51,29 +51,12 @@ pub fn get_week_lookup_keys(monday: &str, target_key: &str) -> Vec<String> {
     }
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 fn load_cache() -> CacheData {
-    let path = match cache_file() {
-        Ok(path) => path,
-        Err(_) => return CacheData::default(),
-    };
-    let raw = match fs::read_to_string(path) {
-        Ok(raw) => raw,
-        Err(_) => return CacheData::default(),
-    };
-    serde_json::from_str(&raw).unwrap_or_default()
+    cache_file().map(read_json_or_default).unwrap_or_default()
 }
 
 fn save_cache(cache: &CacheData) -> Result<(), StorageError> {
-    fs::create_dir_all(config_dir()?)?;
-    fs::write(cache_file()?, serde_json::to_vec_pretty(cache)?)?;
-    Ok(())
+    write_json_pretty(cache_file()?, cache)
 }
 
 fn ensure_lesson_instance_id(
@@ -125,7 +108,7 @@ pub fn get_cached_week(monday: &str, target_key: &str) -> Option<WeekTimetable> 
     }
 
     let week = found?;
-    if now_ms().saturating_sub(week.timestamp) > CACHE_TTL_MS {
+    if is_expired(week.timestamp, CACHE_TTL_MS) {
         if let Some(storage_key) = storage_key {
             cache.weeks.remove(&storage_key);
             let _ = save_cache(&cache);
@@ -179,7 +162,7 @@ pub fn save_week_to_cache(
 
 pub fn clear_cache() -> Result<(), StorageError> {
     if let Ok(path) = cache_file() {
-        fs::write(path, serde_json::to_vec_pretty(&CacheData::default())?)?;
+        write_json_pretty(path, &CacheData::default())?;
     }
     Ok(())
 }
