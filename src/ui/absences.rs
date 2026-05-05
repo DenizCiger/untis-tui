@@ -212,7 +212,7 @@ pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         summary_area,
         filtered_excused,
         filtered_unexcused,
-        total_absent_minutes(&filtered),
+        total_absent_minutes(&filtered, &build_school_hours_model(state)),
         &state.main.absences.window_filter.label(),
         &newest_loaded,
         &oldest_loaded,
@@ -558,15 +558,122 @@ fn render_absence_summary_pane(
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-fn total_absent_minutes(absences: &[crate::models::ParsedAbsence]) -> i64 {
+#[derive(Clone, Copy)]
+struct DayWindow {
+    start_min: i64,
+    end_min: i64,
+}
+
+struct SchoolHoursModel {
+    by_date: std::collections::HashMap<chrono::NaiveDate, DayWindow>,
+    by_weekday: std::collections::HashMap<chrono::Weekday, DayWindow>,
+    fallback: DayWindow,
+}
+
+impl SchoolHoursModel {
+    fn window_for(&self, date: chrono::NaiveDate) -> Option<DayWindow> {
+        use chrono::Weekday;
+        if matches!(date.weekday(), Weekday::Sat | Weekday::Sun) {
+            return None;
+        }
+        if let Some(w) = self.by_date.get(&date) {
+            return Some(*w);
+        }
+        if let Some(w) = self.by_weekday.get(&date.weekday()) {
+            return Some(*w);
+        }
+        Some(self.fallback)
+    }
+}
+
+fn day_window_from_lessons(lessons: &[crate::models::ParsedLesson]) -> Option<DayWindow> {
+    use crate::models::parse_time_to_minutes;
+    let mut starts = lessons.iter().map(|l| parse_time_to_minutes(&l.start_time));
+    let mut ends = lessons.iter().map(|l| parse_time_to_minutes(&l.end_time));
+    let start = starts.next()?;
+    let start = starts.fold(start, i32::min);
+    let end = ends.next()?;
+    let end = ends.fold(end, i32::max);
+    Some(DayWindow {
+        start_min: start as i64,
+        end_min: end as i64,
+    })
+}
+
+fn build_school_hours_model(state: &AppState) -> SchoolHoursModel {
+    use crate::models::target_to_cache_key;
+    use crate::storage::cache::collect_cached_weeks_for_target;
+    use std::collections::HashMap;
+
+    let target_key = target_to_cache_key(Some(&state.main.timetable.active_target));
+    let weeks = collect_cached_weeks_for_target(&target_key);
+
+    let mut by_date: HashMap<chrono::NaiveDate, DayWindow> = HashMap::new();
+    let mut weekday_buckets: HashMap<chrono::Weekday, (Vec<i64>, Vec<i64>)> = HashMap::new();
+
+    for week in &weeks {
+        for day in &week.days {
+            if let Some(window) = day_window_from_lessons(&day.lessons) {
+                by_date.insert(day.date, window);
+                let bucket = weekday_buckets.entry(day.date.weekday()).or_default();
+                bucket.0.push(window.start_min);
+                bucket.1.push(window.end_min);
+            }
+        }
+    }
+
+    let mut by_weekday: HashMap<chrono::Weekday, DayWindow> = HashMap::new();
+    for (weekday, (mut starts, mut ends)) in weekday_buckets {
+        starts.sort();
+        ends.sort();
+        by_weekday.insert(
+            weekday,
+            DayWindow {
+                start_min: starts[starts.len() / 2],
+                end_min: ends[ends.len() / 2],
+            },
+        );
+    }
+
+    SchoolHoursModel {
+        by_date,
+        by_weekday,
+        fallback: DayWindow { start_min: 8 * 60, end_min: 16 * 60 },
+    }
+}
+
+fn total_absent_minutes(
+    absences: &[crate::models::ParsedAbsence],
+    model: &SchoolHoursModel,
+) -> i64 {
     use crate::models::parse_time_to_minutes;
     absences
         .iter()
         .map(|a| {
-            let start_min = parse_time_to_minutes(&a.start_time) as i64;
-            let end_min = parse_time_to_minutes(&a.end_time) as i64;
-            let days = (a.end_date - a.start_date).num_days();
-            (days * 24 * 60 + (end_min - start_min)).max(0)
+            let raw_start = parse_time_to_minutes(&a.start_time) as i64;
+            let raw_end = parse_time_to_minutes(&a.end_time) as i64;
+            let mut date = a.start_date;
+            let mut total = 0i64;
+            while date <= a.end_date {
+                if let Some(window) = model.window_for(date) {
+                    let day_start = if date == a.start_date {
+                        raw_start.max(window.start_min)
+                    } else {
+                        window.start_min
+                    };
+                    let day_end = if date == a.end_date {
+                        raw_end.min(window.end_min)
+                    } else {
+                        window.end_min
+                    };
+                    total += (day_end - day_start).max(0);
+                }
+                date = match date.succ_opt() {
+                    Some(next) => next,
+                    None => break,
+                };
+            }
+            total
         })
         .sum()
 }

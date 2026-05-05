@@ -138,6 +138,25 @@ pub fn get_cached_week(monday: &str, target_key: &str) -> Option<WeekTimetable> 
     })
 }
 
+pub fn collect_cached_weeks_for_target(target_key: &str) -> Vec<WeekTimetable> {
+    let cache = load_cache();
+    let normalized = if target_key.trim().is_empty() {
+        "own"
+    } else {
+        target_key.trim()
+    };
+    let prefix = format!("{normalized}:");
+    cache
+        .weeks
+        .into_iter()
+        .filter(|(key, entry)| {
+            !is_expired(entry.timestamp, CACHE_TTL_MS)
+                && (key.starts_with(&prefix) || (normalized == "own" && !key.contains(':')))
+        })
+        .map(|(_, entry)| entry.data)
+        .collect()
+}
+
 pub fn save_week_to_cache(
     monday: &str,
     data: &WeekTimetable,
