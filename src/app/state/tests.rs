@@ -178,6 +178,9 @@ fn left_click(column: u16, row: u16) -> MouseEvent {
 
 #[test]
 fn bootstrap_with_saved_password_shows_login_with_saved_credentials() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded test; isolates session.json read in bootstrap.
+    unsafe { std::env::set_var(crate::storage::CONFIG_DIR_ENV, tmp.path()) };
     let mut state = AppState::new();
     let commands = state.handle_worker_event(WorkerEvent::BootstrapLoaded(BootstrapPayload {
         saved_config: Some(sample_config().saved()),
@@ -190,6 +193,7 @@ fn bootstrap_with_saved_password_shows_login_with_saved_credentials() {
     assert_eq!(state.saved_password.as_deref(), Some("secret"));
     assert!(state.saved_login_config().is_some());
     assert!(commands.is_empty());
+    unsafe { std::env::remove_var(crate::storage::CONFIG_DIR_ENV) };
 }
 
 #[test]

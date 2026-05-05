@@ -212,6 +212,7 @@ pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         summary_area,
         filtered_excused,
         filtered_unexcused,
+        total_absent_minutes(&state.main.absences.absences),
         &state.main.absences.window_filter.label(),
         &newest_loaded,
         &oldest_loaded,
@@ -525,6 +526,7 @@ fn render_absence_summary_pane(
     area: Rect,
     excused_count: usize,
     unexcused_count: usize,
+    total_minutes: i64,
     window_label: &str,
     newest_loaded: &str,
     oldest_loaded: &str,
@@ -544,12 +546,34 @@ fn render_absence_summary_pane(
         Line::from(format!(
             "{excused_count} excused | {unexcused_count} unexcused"
         )),
+        Line::from(format!(
+            "Total: {} absent",
+            format_hours_minutes(total_minutes)
+        )),
         Line::from(Span::styled(
             format!("Loaded range: {newest_loaded} -> {oldest_loaded}"),
             Style::default().fg(DIM_GRAY),
         )),
     ];
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn total_absent_minutes(absences: &[crate::models::ParsedAbsence]) -> i64 {
+    use crate::models::parse_time_to_minutes;
+    absences
+        .iter()
+        .map(|a| {
+            let start_min = parse_time_to_minutes(&a.start_time) as i64;
+            let end_min = parse_time_to_minutes(&a.end_time) as i64;
+            let days = (a.end_date - a.start_date).num_days();
+            (days * 24 * 60 + (end_min - start_min)).max(0)
+        })
+        .sum()
+}
+
+fn format_hours_minutes(minutes: i64) -> String {
+    let m = minutes.max(0);
+    format!("{}h {:02}m", m / 60, m % 60)
 }
 
 fn render_absence_details_pane(
