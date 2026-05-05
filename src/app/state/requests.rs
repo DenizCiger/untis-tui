@@ -287,11 +287,9 @@ impl AppState {
         }
 
         self.persist_profile_session();
-        if let Some(config) = &self.config {
-            self.saved_password = Some(config.password.clone());
-        }
         let _ = clear_cache();
         self.config = None;
+        self.app_error.clear();
         self.main.settings_open = false;
         self.main.timetable.search_open = false;
         self.main.absences.search_open = false;

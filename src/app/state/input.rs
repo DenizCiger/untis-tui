@@ -7,7 +7,28 @@ use crate::ui::{
     hit_test_shell_click, hit_test_timetable_title_click,
 };
 use chrono::Datelike;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use tui_components::input::login::{handle_login_key as handle_shared_login_key, LoginKeyBindings, LoginKeyOutcome};
+
+fn next_login_field(field: LoginField) -> LoginField {
+    match field {
+        LoginField::Server => LoginField::School,
+        LoginField::School => LoginField::Username,
+        LoginField::Username => LoginField::Password,
+        LoginField::Password => LoginField::Submit,
+        LoginField::Submit => LoginField::Server,
+    }
+}
+
+fn prev_login_field(field: LoginField) -> LoginField {
+    match field {
+        LoginField::Server => LoginField::Submit,
+        LoginField::School => LoginField::Server,
+        LoginField::Username => LoginField::School,
+        LoginField::Password => LoginField::Username,
+        LoginField::Submit => LoginField::Password,
+    }
+}
 
 impl AppState {
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
@@ -36,65 +57,46 @@ impl AppState {
             return Vec::new();
         }
 
-        if key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT) {
-            self.login.active_field = match self.login.active_field {
-                LoginField::Server => LoginField::Server,
-                LoginField::School => LoginField::Server,
-                LoginField::Username => LoginField::School,
-                LoginField::Password => LoginField::Username,
+        let mut focus = self.login.active_field;
+        let outcome = {
+            let input = match focus {
+                LoginField::Server => Some(&mut self.login.server),
+                LoginField::School => Some(&mut self.login.school),
+                LoginField::Username => Some(&mut self.login.username),
+                LoginField::Password => Some(&mut self.login.password),
+                LoginField::Submit => None,
             };
-            return Vec::new();
-        }
+            handle_shared_login_key(
+                key,
+                &mut focus,
+                LoginField::Password,
+                LoginField::Submit,
+                input,
+                next_login_field,
+                prev_login_field,
+                LoginKeyBindings::default(),
+            )
+        };
+        self.login.active_field = focus;
 
-        if key.code == KeyCode::Tab || key.code == KeyCode::Down {
-            self.login.active_field = match self.login.active_field {
-                LoginField::Server => LoginField::School,
-                LoginField::School => LoginField::Username,
-                LoginField::Username => LoginField::Password,
-                LoginField::Password => LoginField::Password,
-            };
-            return Vec::new();
-        }
-
-        if key.code == KeyCode::Up {
-            self.login.active_field = match self.login.active_field {
-                LoginField::Server => LoginField::Server,
-                LoginField::School => LoginField::Server,
-                LoginField::Username => LoginField::School,
-                LoginField::Password => LoginField::Username,
-            };
-            return Vec::new();
-        }
-
-        if is_shortcut_pressed("login-toggle-password", key) {
-            self.login.show_password = !self.login.show_password;
-            return Vec::new();
-        }
-
-        if is_shortcut_pressed("login-saved", key) {
-            if let Some(config) = self.saved_login_config() {
-                self.login.loading = true;
-                self.login.error.clear();
-                return vec![AppCommand::ValidateLogin(config)];
+        match outcome {
+            LoginKeyOutcome::Submit => self.submit_login(),
+            LoginKeyOutcome::SavedLogin => {
+                if let Some(config) = self.saved_login_config() {
+                    self.login.loading = true;
+                    self.login.error.clear();
+                    vec![AppCommand::ValidateLogin(config)]
+                } else {
+                    Vec::new()
+                }
             }
-            return Vec::new();
-        }
-
-        if key.code == KeyCode::Enter {
-            if self.login.active_field != LoginField::Password {
-                self.login.active_field = match self.login.active_field {
-                    LoginField::Server => LoginField::School,
-                    LoginField::School => LoginField::Username,
-                    LoginField::Username => LoginField::Password,
-                    LoginField::Password => LoginField::Password,
-                };
-                return Vec::new();
+            LoginKeyOutcome::TogglePassword => {
+                self.login.show_password = !self.login.show_password;
+                Vec::new()
             }
-            return self.submit_login();
+            LoginKeyOutcome::Quit => vec![AppCommand::Quit],
+            _ => Vec::new(),
         }
-
-        self.current_login_input_mut().handle_key(key);
-        Vec::new()
     }
 
     fn handle_main_key(&mut self, key: KeyEvent) -> Vec<AppCommand> {
@@ -528,12 +530,4 @@ impl AppState {
         Vec::new()
     }
 
-    fn current_login_input_mut(&mut self) -> &mut TextInputState {
-        match self.login.active_field {
-            LoginField::Server => &mut self.login.server,
-            LoginField::School => &mut self.login.school,
-            LoginField::Username => &mut self.login.username,
-            LoginField::Password => &mut self.login.password,
-        }
-    }
 }

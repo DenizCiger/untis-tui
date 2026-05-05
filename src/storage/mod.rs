@@ -2,21 +2,11 @@ pub mod cache;
 pub mod config;
 pub mod secret;
 
-use directories::BaseDirs;
 use std::path::PathBuf;
 
-#[derive(Debug, thiserror::Error)]
-pub enum StorageError {
-    #[error("{0}")]
-    Message(String),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Json(#[from] serde_json::Error),
-}
+pub const CONFIG_DIR_ENV: &str = "TUI_UNTIS_CONFIG_DIR";
+pub use tui_components::storage::StorageError;
 
 pub fn config_dir() -> Result<PathBuf, StorageError> {
-    let base_dirs = BaseDirs::new()
-        .ok_or_else(|| StorageError::Message("Failed to determine home directory".to_owned()))?;
-    Ok(base_dirs.home_dir().join(".config").join("tui-untis"))
+    tui_components::storage::app_config_dir("tui-untis", Some(CONFIG_DIR_ENV))
 }

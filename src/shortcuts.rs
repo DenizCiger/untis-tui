@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tui_components::shortcuts::{char_key, plain_char};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
@@ -17,16 +18,6 @@ pub struct ShortcutDisplay {
     pub id: &'static str,
     pub keys: &'static str,
     pub action: &'static str,
-}
-
-fn char_key(key: KeyEvent, expected: char) -> bool {
-    matches!(key.code, KeyCode::Char(value) if value == expected)
-}
-
-fn plain_char(key: KeyEvent, expected: char) -> bool {
-    char_key(key, expected)
-        && !key.modifiers.contains(KeyModifiers::CONTROL)
-        && !key.modifiers.contains(KeyModifiers::ALT)
 }
 
 pub fn is_shortcut_pressed(id: &str, key: KeyEvent) -> bool {
@@ -90,7 +81,7 @@ pub fn is_shortcut_pressed(id: &str, key: KeyEvent) -> bool {
         "absences-search-cancel" => key.code == KeyCode::Esc,
         "login-saved" => char_key(key, 'l') && key.modifiers.contains(KeyModifiers::CONTROL),
         "login-toggle-password" => {
-            char_key(key, 'v') && key.modifiers.contains(KeyModifiers::CONTROL)
+            char_key(key, 'v') && key.modifiers.contains(KeyModifiers::ALT)
         }
         _ => false,
     }

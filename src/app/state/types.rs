@@ -3,6 +3,7 @@ use crate::models::{
     get_default_timetable_target, today_local,
 };
 use crate::shortcuts::TabId;
+pub use tui_components::input::TextInputState;
 use chrono::{Datelike, NaiveDate};
 use std::collections::HashMap;
 
@@ -81,18 +82,13 @@ pub struct AbsenceChunkPayload {
     pub days_loaded: usize,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct TextInputState {
-    pub value: String,
-    pub cursor: usize,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginField {
     Server,
     School,
     Username,
     Password,
+    Submit,
 }
 
 #[derive(Debug, Clone)]

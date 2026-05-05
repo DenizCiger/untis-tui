@@ -2186,6 +2186,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "tui-components"
+version = "0.1.0"
+source = "git+https://github.com/DenizCiger/tui-components?tag=v0.1.4#7809a202d22e938ba26a99c635a6648289f5cf6e"
+dependencies = [
+ "crossterm",
+ "directories",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "unicode-width",
+]
+
+[[package]]
 name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2256,6 +2270,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tui-components",
  "unicode-normalization",
  "unicode-width",
 ]

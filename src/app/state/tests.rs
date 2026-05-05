@@ -177,7 +177,7 @@ fn left_click(column: u16, row: u16) -> MouseEvent {
 }
 
 #[test]
-fn bootstrap_with_saved_password_enters_main_shell() {
+fn bootstrap_with_saved_password_shows_login_with_saved_credentials() {
     let mut state = AppState::new();
     let commands = state.handle_worker_event(WorkerEvent::BootstrapLoaded(BootstrapPayload {
         saved_config: Some(sample_config().saved()),
@@ -185,18 +185,11 @@ fn bootstrap_with_saved_password_enters_main_shell() {
         secure_storage_notice: String::new(),
     }));
 
-    assert_eq!(state.screen, Screen::MainShell);
-    assert!(state.config.is_some());
-    assert!(
-        commands
-            .iter()
-            .any(|command| matches!(command, AppCommand::LoadTimetableNetwork { .. }))
-    );
-    assert!(
-        commands
-            .iter()
-            .any(|command| matches!(command, AppCommand::LoadAbsenceChunk { .. }))
-    );
+    assert_eq!(state.screen, Screen::Login);
+    assert!(state.config.is_none());
+    assert_eq!(state.saved_password.as_deref(), Some("secret"));
+    assert!(state.saved_login_config().is_some());
+    assert!(commands.is_empty());
 }
 
 #[test]

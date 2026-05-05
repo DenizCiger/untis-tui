@@ -37,19 +37,6 @@ impl AppState {
         self.secure_storage_notice = payload.secure_storage_notice;
         self.hydrate_login_form();
 
-        if let (Some(saved_config), Some(saved_password)) =
-            (payload.saved_config, payload.saved_password)
-        {
-            self.config = Some(Config {
-                school: saved_config.school.clone(),
-                username: saved_config.username.clone(),
-                password: saved_password,
-                server: saved_config.server.clone(),
-            });
-            self.screen = super::Screen::MainShell;
-            return self.enter_main_shell();
-        }
-
         self.screen = super::Screen::Login;
         Vec::new()
     }
