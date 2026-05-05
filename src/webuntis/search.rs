@@ -5,6 +5,61 @@ use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
+#[derive(Debug, Clone, Default)]
+pub struct SearchHighlight {
+    pub name: Vec<usize>,
+    pub long_name: Vec<usize>,
+}
+
+/// Best-effort match-position resolver for the timetable search results. Tries
+/// substring then subsequence on the original (untouched) name and long_name,
+/// case-insensitively. Returns empty vecs when the matcher's success can't be
+/// directly explained by either field (e.g. typo-tolerance, initials).
+pub fn highlight_indices_for_query(name: &str, long_name: &str, query: &str) -> SearchHighlight {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return SearchHighlight::default();
+    }
+    if let Some(indices) = substring_indices(name, &q) {
+        return SearchHighlight { name: indices, long_name: Vec::new() };
+    }
+    if let Some(indices) = substring_indices(long_name, &q) {
+        return SearchHighlight { name: Vec::new(), long_name: indices };
+    }
+    if let Some(indices) = subsequence_indices(name, &q) {
+        return SearchHighlight { name: indices, long_name: Vec::new() };
+    }
+    if let Some(indices) = subsequence_indices(long_name, &q) {
+        return SearchHighlight { name: Vec::new(), long_name: indices };
+    }
+    SearchHighlight::default()
+}
+
+fn substring_indices(haystack: &str, query_lower: &str) -> Option<Vec<usize>> {
+    let hay_lower = haystack.to_lowercase();
+    let byte_start = hay_lower.find(query_lower)?;
+    let char_start = hay_lower[..byte_start].chars().count();
+    let q_len = query_lower.chars().count();
+    Some((char_start..char_start + q_len).collect())
+}
+
+fn subsequence_indices(haystack: &str, query_lower: &str) -> Option<Vec<usize>> {
+    let mut q_chars = query_lower.chars().peekable();
+    let mut indices = Vec::new();
+    for (idx, ch) in haystack.to_lowercase().chars().enumerate() {
+        let Some(&qc) = q_chars.peek() else { break };
+        if ch == qc {
+            indices.push(idx);
+            q_chars.next();
+        }
+    }
+    if q_chars.peek().is_some() {
+        None
+    } else {
+        Some(indices)
+    }
+}
+
 pub fn format_timetable_search_type_label(target_type: TimetableSearchTargetType) -> &'static str {
     match target_type {
         TimetableSearchTargetType::Class => "Class",

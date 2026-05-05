@@ -161,7 +161,8 @@ pub(super) fn render_timetable(frame: &mut Frame, state: &AppState, area: Rect) 
 }
 
 pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState, _area: Rect) {
-    use tui_components::ui::search::{SearchModal, SearchModalRow};
+    use crate::webuntis::highlight_indices_for_query;
+    use tui_components::ui::search::{SearchModal, SearchModalRow, highlight_spans};
 
     let hint = if state.main.timetable.search_index_loading {
         "Loading timetable targets...".to_owned()
@@ -171,21 +172,43 @@ pub(super) fn render_timetable_search_popup(frame: &mut Frame, state: &AppState,
         "Use ↑/↓ and Enter apply, Esc cancel.".to_owned()
     };
     let results = state.timetable_search_results();
+    let query = state.main.timetable.search.input.value.clone();
+    let highlight_style = Style::default()
+        .fg(WARNING)
+        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
     let rows: Vec<SearchModalRow> = results
         .into_iter()
         .map(|result| {
-            let suffix = if result.long_name != result.name {
-                format!(" ({})", result.long_name)
+            let hi = highlight_indices_for_query(&result.name, &result.long_name, &query);
+            let mut spans = vec![Span::styled(
+                format!("[{}] ", format_timetable_search_type_label(result.r#type)),
+                Style::default().fg(Color::Gray),
+            )];
+            if hi.name.is_empty() {
+                spans.push(Span::raw(result.name.clone()));
             } else {
-                String::new()
-            };
-            SearchModalRow::new(vec![
-                Span::styled(
-                    format!("[{}] ", format_timetable_search_type_label(result.r#type)),
-                    Style::default().fg(Color::Gray),
-                ),
-                Span::raw(format!("{}{}", result.name, suffix)),
-            ])
+                spans.extend(highlight_spans(
+                    &result.name,
+                    &hi.name,
+                    Style::default(),
+                    highlight_style,
+                ));
+            }
+            if result.long_name != result.name {
+                spans.push(Span::raw(" ("));
+                if hi.long_name.is_empty() {
+                    spans.push(Span::raw(result.long_name.clone()));
+                } else {
+                    spans.extend(highlight_spans(
+                        &result.long_name,
+                        &hi.long_name,
+                        Style::default(),
+                        highlight_style,
+                    ));
+                }
+                spans.push(Span::raw(")"));
+            }
+            SearchModalRow::new(spans)
         })
         .collect();
     SearchModal {
