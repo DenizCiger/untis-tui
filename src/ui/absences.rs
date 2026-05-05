@@ -212,7 +212,7 @@ pub(super) fn render_absences(frame: &mut Frame, state: &AppState, area: Rect) {
         summary_area,
         filtered_excused,
         filtered_unexcused,
-        total_absent_minutes(&state.main.absences.absences),
+        total_absent_minutes(&filtered),
         &state.main.absences.window_filter.label(),
         &newest_loaded,
         &oldest_loaded,
@@ -558,23 +558,15 @@ fn render_absence_summary_pane(
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-/// Conservative school-day length used for multi-day absence records, where
-/// the API's start/end times don't reflect real missed time.
-const SCHOOL_DAY_MINUTES: i64 = 8 * 60;
-
 fn total_absent_minutes(absences: &[crate::models::ParsedAbsence]) -> i64 {
     use crate::models::parse_time_to_minutes;
     absences
         .iter()
         .map(|a| {
-            let span_days = (a.end_date - a.start_date).num_days();
-            if span_days <= 0 {
-                let start_min = parse_time_to_minutes(&a.start_time) as i64;
-                let end_min = parse_time_to_minutes(&a.end_time) as i64;
-                (end_min - start_min).max(0)
-            } else {
-                (span_days + 1) * SCHOOL_DAY_MINUTES
-            }
+            let start_min = parse_time_to_minutes(&a.start_time) as i64;
+            let end_min = parse_time_to_minutes(&a.end_time) as i64;
+            let days = (a.end_date - a.start_date).num_days();
+            (days * 24 * 60 + (end_min - start_min)).max(0)
         })
         .sum()
 }
