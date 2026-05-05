@@ -9,7 +9,7 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use tui_components::ui::settings::{SettingsItemView, SettingsModal, SettingsSectionView};
+use tui_components::ui::settings::SettingsModal;
 use tui_components::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,21 +105,10 @@ pub(crate) fn hit_test_shell_click(column: u16, row: u16) -> Option<ShellClickTa
 }
 
 fn render_shortcuts_modal(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
-    let sections = get_shortcut_sections(state.main.active_tab)
-        .into_iter()
-        .map(|section| SettingsSectionView {
-            title: section.title.to_owned(),
-            items: section
-                .items
-                .into_iter()
-                .map(|item| SettingsItemView {
-                    keys: item.keys.to_owned(),
-                    action: item.action.to_owned(),
-                })
-                .collect(),
-        })
-        .collect();
-    let mut modal = SettingsModal::new("Keyboard shortcuts", sections);
+    let mut modal = SettingsModal::from_shortcuts(
+        "Keyboard shortcuts",
+        get_shortcut_sections(state.main.active_tab),
+    );
     modal.scroll = state.main.settings_scroll;
     modal.key_width = 18;
     modal.render(frame, area, app_theme());

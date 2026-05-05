@@ -1,23 +1,12 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tui_components::shortcuts::{char_key, plain_char};
+use tui_components::shortcuts::{
+    char_key, display, plain_char, ShortcutDisplay, ShortcutSection,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
     Timetable,
     Absences,
-}
-
-#[derive(Debug, Clone)]
-pub struct ShortcutSection {
-    pub title: &'static str,
-    pub items: Vec<ShortcutDisplay>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ShortcutDisplay {
-    pub id: &'static str,
-    pub keys: &'static str,
-    pub action: &'static str,
 }
 
 pub fn is_shortcut_pressed(id: &str, key: KeyEvent) -> bool {
@@ -85,10 +74,6 @@ pub fn is_shortcut_pressed(id: &str, key: KeyEvent) -> bool {
         }
         _ => false,
     }
-}
-
-fn display(id: &'static str, keys: &'static str, action: &'static str) -> ShortcutDisplay {
-    ShortcutDisplay { id, keys, action }
 }
 
 fn pick(ids: &[&'static str]) -> Vec<ShortcutDisplay> {
