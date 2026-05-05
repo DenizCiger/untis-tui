@@ -164,6 +164,7 @@ pub struct AbsencesState {
 pub struct MainState {
     pub active_tab: TabId,
     pub settings_open: bool,
+    pub settings_scroll: u16,
     pub timetable: TimetableState,
     pub absences: AbsencesState,
 }
@@ -259,6 +260,7 @@ impl Default for MainState {
         Self {
             active_tab: TabId::Timetable,
             settings_open: false,
+            settings_scroll: 0,
             timetable: TimetableState::default(),
             absences: AbsencesState::default(),
         }

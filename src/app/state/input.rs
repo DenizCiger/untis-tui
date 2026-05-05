@@ -1,6 +1,6 @@
 use super::{AppCommand, AppState, LoginField, TextInputState};
 use crate::models::{TimetableTarget, today_local};
-use crate::shortcuts::{TabId, is_shortcut_pressed};
+use crate::shortcuts::{TabId, get_shortcut_sections, is_shortcut_pressed};
 use crate::timetable_model::{find_next_lesson_period_index, hit_test_timetable_click};
 use crate::ui::{
     ShellClickTarget, TimetableTitleClickTarget, hit_test_absence_history_click,
@@ -28,6 +28,13 @@ fn prev_login_field(field: LoginField) -> LoginField {
         LoginField::Password => LoginField::Username,
         LoginField::Submit => LoginField::Password,
     }
+}
+
+fn settings_total_lines(active_tab: TabId) -> u16 {
+    get_shortcut_sections(active_tab)
+        .into_iter()
+        .map(|section| 1 + section.items.len() as u16 + 1)
+        .sum()
 }
 
 impl AppState {
@@ -103,6 +110,29 @@ impl AppState {
         if self.main.settings_open {
             if is_shortcut_pressed("settings-close", key) {
                 self.main.settings_open = false;
+                self.main.settings_scroll = 0;
+                return Vec::new();
+            }
+            let total = settings_total_lines(self.main.active_tab);
+            let viewport = ((self.terminal_height as f32) * 0.8) as u16;
+            let viewport = viewport.saturating_sub(3);
+            let max_scroll = total.saturating_sub(viewport);
+            match key.code {
+                KeyCode::Up => {
+                    self.main.settings_scroll = self.main.settings_scroll.min(max_scroll).saturating_sub(1);
+                }
+                KeyCode::Down => {
+                    self.main.settings_scroll = (self.main.settings_scroll + 1).min(max_scroll);
+                }
+                KeyCode::PageUp => {
+                    self.main.settings_scroll = self.main.settings_scroll.min(max_scroll).saturating_sub(10);
+                }
+                KeyCode::PageDown => {
+                    self.main.settings_scroll = (self.main.settings_scroll + 10).min(max_scroll);
+                }
+                KeyCode::Home => self.main.settings_scroll = 0,
+                KeyCode::End => self.main.settings_scroll = max_scroll,
+                _ => {}
             }
             return Vec::new();
         }
@@ -117,6 +147,7 @@ impl AppState {
 
         if is_shortcut_pressed("settings-open", key) {
             self.main.settings_open = true;
+            self.main.settings_scroll = 0;
             return Vec::new();
         }
 

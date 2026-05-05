@@ -120,7 +120,7 @@ fn render_shortcuts_modal(frame: &mut Frame, state: &AppState, area: ratatui::la
         })
         .collect();
     let mut modal = SettingsModal::new("Keyboard shortcuts", sections);
-    modal.scroll = 0;
+    modal.scroll = state.main.settings_scroll;
     modal.key_width = 18;
     modal.render(frame, area, app_theme());
 }
