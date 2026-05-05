@@ -1,6 +1,6 @@
 use super::absences::render_absences;
-use super::shared::{fit_text, tab_span};
-use super::theme::{BRAND, DIM_GRAY};
+use super::shared::tab_span;
+use super::theme::{self, BRAND, DIM_GRAY};
 use super::timetable::{render_timetable, render_timetable_search_popup};
 use crate::app::state::AppState;
 use crate::shortcuts::{TabId, get_shortcut_sections};
@@ -8,8 +8,9 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use unicode_width::UnicodeWidthStr;
+use ratatui::widgets::Paragraph;
+use tui_components::ui::settings::{SettingsItemView, SettingsModal, SettingsSectionView};
+use tui_components::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellClickTarget {
@@ -104,51 +105,38 @@ pub(crate) fn hit_test_shell_click(column: u16, row: u16) -> Option<ShellClickTa
 }
 
 fn render_shortcuts_modal(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
-    let sections = get_shortcut_sections(state.main.active_tab);
-    let mut lines = Vec::new();
-    for section in sections {
-        lines.push(Line::from(Span::styled(
-            section.title,
-            Style::default().add_modifier(Modifier::BOLD),
-        )));
-        for item in section.items {
-            lines.push(Line::from(format!(
-                "{} - {}",
-                fit_text(item.keys, 18),
-                item.action
-            )));
-        }
-        lines.push(Line::from(""));
+    let sections = get_shortcut_sections(state.main.active_tab)
+        .into_iter()
+        .map(|section| SettingsSectionView {
+            title: section.title.to_owned(),
+            items: section
+                .items
+                .into_iter()
+                .map(|item| SettingsItemView {
+                    keys: item.keys.to_owned(),
+                    action: item.action.to_owned(),
+                })
+                .collect(),
+        })
+        .collect();
+    let mut modal = SettingsModal::new("Keyboard shortcuts", sections);
+    modal.scroll = 0;
+    modal.key_width = 18;
+    modal.render(frame, area, app_theme());
+}
+
+fn app_theme() -> Theme {
+    Theme {
+        brand: theme::BRAND,
+        warning: theme::WARNING,
+        error: theme::ERROR,
+        success: theme::INFO,
+        neutral_white: theme::BRIGHT_WHITE,
+        neutral_black: theme::BLACK,
+        neutral_gray: theme::DIM_GRAY,
+        neutral_bright_black: theme::BORDER_GRAY,
+        panel_header: theme::HEADER_BG,
+        panel_selected: theme::SELECT_BG,
+        panel_alternate: theme::ALT_BG,
     }
-
-    let content_width = lines
-        .iter()
-        .map(|line| UnicodeWidthStr::width(line.to_string().as_str()) as u16)
-        .max()
-        .unwrap_or(0);
-    let min_width = 48;
-    let target_width = content_width.saturating_add(4).max(min_width);
-    let max_width = area.width.saturating_sub(4).min((area.width * 60) / 100);
-    let popup_width = target_width.min(max_width).max(1);
-
-    let target_height = (lines.len() as u16).saturating_add(2);
-    let max_height = area.height.saturating_sub(4).min((area.height * 65) / 100);
-    let popup_height = target_height.min(max_height).max(1);
-
-    let popup = Rect {
-        x: area.x + area.width.saturating_sub(popup_width) / 2,
-        y: area.y + area.height.saturating_sub(popup_height) / 2,
-        width: popup_width,
-        height: popup_height,
-    };
-
-    frame.render_widget(Clear, popup);
-    let block = Block::default()
-        .title("Settings")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(BRAND));
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
-
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
